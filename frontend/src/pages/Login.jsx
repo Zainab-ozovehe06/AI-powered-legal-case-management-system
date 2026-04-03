@@ -41,7 +41,7 @@ export default function Login() {
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 text-white mb-4 shadow-lg shadow-blue-200">
             <Scale size={32} />
           </div>
-          <h1 className="text-2xl font-bold text-center">Law Clinic AI</h1>
+          <h1 className="text-2xl font-bold text-center">NILE LAW CLINIC</h1>
           <p className="text-muted text-center mt-2">Sign in to manage your cases</p>
         </div>
 

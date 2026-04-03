@@ -2,15 +2,14 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// TODO: Replace with your actual Firebase config later
 const firebaseConfig = {
-  apiKey: "AIzaSyDA0CPgXfxc2kQctBN7xaTYsxUZC1k4yvQ",
-  authDomain: "legal-case-management-sy-fcca7.firebaseapp.com",
-  projectId: "legal-case-management-sy-fcca7",
-  storageBucket: "legal-case-management-sy-fcca7.firebasestorage.app",
-  messagingSenderId: "241445097218",
-  appId: "1:241445097218:web:25bc866659a948af207c1b",
-  measurementId: "G-LV654ZQHNS"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);
