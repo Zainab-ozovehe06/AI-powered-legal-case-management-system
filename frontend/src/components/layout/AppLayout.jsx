@@ -3,7 +3,7 @@ import { Outlet, Navigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { useAuth } from '../../context/AuthContext';
-import { AIAssistantWidget } from '../ui/AIAssistantWidget';
+
 
 export const AppLayout = () => {
     const [collapsed, setCollapsed] = useState(false);
@@ -22,7 +22,7 @@ export const AppLayout = () => {
                     <Outlet />
                 </main>
             </div>
-            <AIAssistantWidget />
+    
         </div>
     );
 };

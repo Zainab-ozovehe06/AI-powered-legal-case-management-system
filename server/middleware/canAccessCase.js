@@ -4,8 +4,9 @@ const canAccessCase = async (req, res, next) => {
   try {
     const { caseId } = req.params;
     const currentUser = req.currentUser;
+    const actorId = currentUser?.uid || currentUser?.user_id;
 
-    if (!currentUser) {
+    if (!currentUser || !actorId) {
       return res.status(401).json({ error: 'Unauthenticated' });
     }
 
@@ -13,17 +14,15 @@ const canAccessCase = async (req, res, next) => {
       return res.status(400).json({ error: 'Case ID is required' });
     }
 
-    // Admin can access any case
     if (currentUser.role === 'admin') {
       return next();
     }
 
-    // Law student can access only assigned cases
     if (currentUser.role === 'law_student') {
       const assignmentSnap = await db
         .collection('case_assignments')
         .where('case_id', '==', caseId)
-        .where('user_id', '==', currentUser.uid)
+        .where('user_id', '==', actorId)
         .limit(1)
         .get();
 
