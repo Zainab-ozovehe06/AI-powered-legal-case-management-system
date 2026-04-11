@@ -1,95 +1,133 @@
-import { Users, AlertTriangle, TrendingUp, BarChart } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Users, FolderOpen, Clock3, CheckCircle2, Loader2 } from 'lucide-react';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import { api } from '../api/apiClient';
 
 export default function AdminDashboard() {
-    return (
-        <div className="flex flex-col gap-6 w-full animate-fade-in">
-            <div className="flex justify-between items-center mb-2">
-                <h1 className="text-2xl font-bold text-slate-800">Clinic Overview</h1>
-                <button className="btn btn-primary bg-slate-800 hover:bg-slate-900 border-none">Generate Report</button>
-            </div>
+  const [summary, setSummary] = useState({
+    totalCases: 0,
+    openCases: 0,
+    closedCases: 0,
+    activeUsers: 0,
+  });
 
-            {/* Stats Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                    { title: 'Total Active Cases', value: '34', icon: <TrendingUp size={20} />, color: 'text-blue-600', bg: 'bg-blue-100' },
-                    { title: 'Pending Reviews', value: '12', icon: <AlertTriangle size={20} />, color: 'text-amber-600', bg: 'bg-amber-100' },
-                    { title: 'Total Students', value: '128', icon: <Users size={20} />, color: 'text-indigo-600', bg: 'bg-indigo-100' },
-                    { title: 'Success Rate (30d)', value: '92%', icon: <BarChart size={20} />, color: 'text-emerald-600', bg: 'bg-emerald-100' },
-                ].map((stat, i) => (
-                    <div key={i} className="card p-5 flex items-center justify-between border-slate-100">
-                        <div>
-                            <p className="text-sm font-medium text-muted mb-1">{stat.title}</p>
-                            <h3 className="text-3xl font-bold text-slate-800">{stat.value}</h3>
-                        </div>
-                        <div className={`w-12 h-12 rounded-full ${stat.bg} ${stat.color} flex items-center justify-center`}>
-                            {stat.icon}
-                        </div>
-                    </div>
-                ))}
-            </div>
+  const [loading, setLoading] = useState(true);
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
+  useEffect(() => {
+    const fetchDashboardSummary = async () => {
+      try {
+        setLoading(true);
 
-                {/* User Management */}
-                <div className="lg:col-span-2 card">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-lg font-semibold text-slate-800">User Management</h2>
-                        <div className="flex gap-2">
-                            <input type="text" placeholder="Search users..." className="input-field py-1.5 px-3 text-sm h-9 w-48" />
-                            <button className="btn btn-secondary text-sm h-9">Filter</button>
-                        </div>
-                    </div>
+        const [cases, activeUsersSnap] = await Promise.all([
+          api.getVisibleCases(),
+          getDocs(query(collection(db, 'users'), where('status', '==', 'active'))),
+        ]);
 
-                    <div className="table-container">
-                        <table className="table">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Role</th>
-                                    <th>Status</th>
-                                    <th className="text-center">Assigned Cases</th>
-                                    <th className="text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {[
-                                    { name: 'Dr. Admin', role: 'admin', status: 'Active', cases: '-' },
-                                    { name: 'Jane Student', role: 'student', status: 'Active', cases: '2' },
-                                    { name: 'John Doe', role: 'student', status: 'Inactive', cases: '0' },
-                                    { name: 'Prof. Smith', role: 'supervisor', status: 'Active', cases: '8' },
-                                ].map((u, i) => (
-                                    <tr key={i}>
-                                        <td className="font-medium text-sm text-slate-800">{u.name}</td>
-                                        <td><span className={`badge ${u.role === 'admin' ? 'badge-primary' : u.role === 'supervisor' ? 'badge-warning' : 'badge-neutral'} uppercase`}>{u.role}</span></td>
-                                        <td><span className={`badge ${u.status === 'Active' ? 'badge-success' : 'badge-danger'}`}>{u.status}</span></td>
-                                        <td className="text-sm text-center text-slate-600 font-medium">{u.cases}</td>
-                                        <td className="text-right">
-                                            <button className="text-blue-600 hover:text-blue-800 text-xs font-semibold">Edit</button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+        const totalCases = cases.length;
+        const openCases = cases.filter(
+          (c) => (c.status || 'open').toLowerCase() !== 'closed'
+        ).length;
+        const closedCases = cases.filter(
+          (c) => (c.status || '').toLowerCase() === 'closed'
+        ).length;
+        const activeUsers = activeUsersSnap.size;
 
-                {/* System Alerts */}
-                <div className="card border-red-100 bg-red-50/10 h-full">
-                    <h2 className="text-lg font-semibold flex items-center gap-2 mb-5 text-slate-800"><AlertTriangle className="text-red-500" size={20} /> System Alerts</h2>
-                    <div className="flex flex-col gap-3">
-                        {[
-                            "Case #102 stalled > 14 days without update",
-                            "3 Deadlines missed this week across teams",
-                            "Server maintenance scheduled at 2AM EST"
-                        ].map((msg, i) => (
-                            <div key={i} className="p-3.5 bg-white rounded-lg border border-red-100 text-sm flex gap-3 items-start shadow-sm hover:border-red-200 transition-colors cursor-default">
-                                <div className="w-2 h-2 rounded-full bg-red-500 mt-1.5 flex-shrink-0"></div>
-                                <span className="text-slate-700 leading-snug">{msg}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
+        setSummary({
+          totalCases,
+          openCases,
+          closedCases,
+          activeUsers,
+        });
+      } catch (error) {
+        console.error('Error loading admin dashboard summary:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardSummary();
+  }, []);
+
+  const cards = [
+    {
+      title: 'Total Cases',
+      value: summary.totalCases,
+      icon: <FolderOpen size={20} />,
+      color: 'text-blue-600',
+      bg: 'bg-blue-100',
+    },
+    {
+      title: 'Open Cases',
+      value: summary.openCases,
+      icon: <Clock3 size={20} />,
+      color: 'text-amber-600',
+      bg: 'bg-amber-100',
+    },
+    {
+      title: 'Closed Cases',
+      value: summary.closedCases,
+      icon: <CheckCircle2 size={20} />,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-100',
+    },
+    {
+      title: 'Active Users',
+      value: summary.activeUsers,
+      icon: <Users size={20} />,
+      color: 'text-indigo-600',
+      bg: 'bg-indigo-100',
+    },
+  ];
+
+  return (
+    <div className="w-full min-h-screen bg-slate-50">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6">
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-slate-500">Admin workspace</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+              Clinic Overview
+            </h1>
+            <p className="text-slate-500 text-sm sm:text-base">
+              Summary of users and cases across the system
+            </p>
+          </div>
         </div>
-    );
+
+        {loading ? (
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-10 flex items-center justify-center">
+            <div className="flex items-center gap-3 text-slate-500">
+              <Loader2 size={20} className="animate-spin" />
+              <span>Loading dashboard summary...</span>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {cards.map((card) => (
+              <div
+                key={card.title}
+                className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex items-center justify-between"
+              >
+                <div>
+                  <p className="text-sm font-medium text-slate-500 mb-1">
+                    {card.title}
+                  </p>
+                  <h3 className="text-3xl font-bold text-slate-900">
+                    {card.value}
+                  </h3>
+                </div>
+
+                <div
+                  className={`w-12 h-12 rounded-full ${card.bg} ${card.color} flex items-center justify-center`}
+                >
+                  {card.icon}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
