@@ -1,34 +1,84 @@
 import { useEffect, useState } from 'react';
-import { FolderOpen, Clock3, CheckCircle2, PlusCircle, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import {
+  AlertTriangle,
+  CalendarDays,
+  Clock3,
+  FolderOpen,
+  Loader2,
+} from 'lucide-react';
 import { api } from '../api/apiClient';
+import { useAuth } from '../context/AuthContext';
+
+const formatLabel = (value, fallback) => {
+  const safeValue = (value || fallback || '').toString().trim();
+
+  if (!safeValue) {
+    return fallback;
+  }
+
+  return safeValue
+    .replace(/[_-]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
+const formatDate = (value) => {
+  const date = value?.toDate?.();
+
+  if (!date) {
+    return 'No date available';
+  }
+
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+};
 
 export default function StudentDashboard() {
-  const [summary, setSummary] = useState({
-    totalCases: 0,
-    openCases: 0,
-    closedCases: 0,
-  });
+  const { currentUser } = useAuth();
+
   const [loading, setLoading] = useState(true);
+  const [cases, setCases] = useState([]);
+  const [stats, setStats] = useState({
+    activeCases: 0,
+    upcomingHearings: 0,
+    pendingActions: 0,
+    urgent: 0,
+  });
 
   useEffect(() => {
-    const fetchSummary = async () => {
+    const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const cases = await api.getVisibleCases();
 
-        const totalCases = cases.length;
-        const openCases = cases.filter(
+        const visibleCases = await api.getVisibleCases();
+
+        const sortedCases = [...visibleCases].sort((a, b) => {
+          const dateA = a.date_opened?.seconds || 0;
+          const dateB = b.date_opened?.seconds || 0;
+          return dateB - dateA;
+        });
+
+        const activeCases = visibleCases.filter(
           (c) => (c.status || 'open').toLowerCase() !== 'closed'
         ).length;
-        const closedCases = cases.filter(
-          (c) => (c.status || '').toLowerCase() === 'closed'
-        ).length;
 
-        setSummary({
-          totalCases,
-          openCases,
-          closedCases,
+        const urgentCases = visibleCases.filter((c) => {
+          const status = (c.status || '').toLowerCase();
+          return status === 'urgent';
+        }).length;
+
+        setCases(sortedCases);
+        setStats({
+          activeCases,
+          upcomingHearings: 0,
+          pendingActions: activeCases,
+          urgent: urgentCases,
         });
       } catch (error) {
         console.error('Error loading student dashboard:', error);
@@ -37,112 +87,188 @@ export default function StudentDashboard() {
       }
     };
 
-    fetchSummary();
+    fetchDashboardData();
   }, []);
 
-  const cards = [
+  const dashboardStats = [
     {
-      title: 'My Cases',
-      value: summary.totalCases,
-      icon: <FolderOpen size={20} />,
-      color: 'text-blue-600',
-      bg: 'bg-blue-100',
+      label: 'Active Cases',
+      value: stats.activeCases,
+      icon: FolderOpen,
+      iconClassName: 'student-stat-icon-primary',
     },
     {
-      title: 'Open Cases',
-      value: summary.openCases,
-      icon: <Clock3 size={20} />,
-      color: 'text-amber-600',
-      bg: 'bg-amber-100',
+      label: 'Upcoming Hearings',
+      value: stats.upcomingHearings,
+      icon: CalendarDays,
+      iconClassName: 'student-stat-icon-warning',
     },
     {
-      title: 'Closed Cases',
-      value: summary.closedCases,
-      icon: <CheckCircle2 size={20} />,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-100',
+      label: 'Pending Actions',
+      value: stats.pendingActions,
+      icon: Clock3,
+      iconClassName: 'student-stat-icon-muted',
+    },
+    {
+      label: 'Urgent',
+      value: stats.urgent,
+      icon: AlertTriangle,
+      iconClassName: 'student-stat-icon-alert',
     },
   ];
 
-  return (
-    <div className="w-full min-h-screen bg-slate-50">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-slate-500">Student workspace</p>
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-                Dashboard
-              </h1>
-              <p className="text-slate-500 mt-1 text-sm sm:text-base">
-                Overview of your assigned cases and activity
-              </p>
-            </div>
+  const recentCases = cases.slice(0, 4);
 
-            <Link
-              to="/cases/new"
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-white font-medium hover:bg-blue-700 transition-colors shadow-sm"
-            >
-              <PlusCircle size={18} />
-              New Case
-            </Link>
+  const getCaseBadge = (status) => {
+    const normalized = (status || 'open').toLowerCase();
+
+    if (normalized === 'closed') {
+      return {
+        className: 'student-status-success',
+        label: formatLabel(status, 'Closed'),
+      };
+    }
+
+    if (normalized === 'urgent') {
+      return {
+        className: 'student-status-danger',
+        label: formatLabel(status, 'Urgent'),
+      };
+    }
+
+    return {
+      className: 'student-status-warning',
+      label: formatLabel(status, 'Open'),
+    };
+  };
+
+  const firstName =
+    currentUser?.displayName?.split(' ')[0] ||
+    currentUser?.name?.split(' ')[0] ||
+    currentUser?.email?.split('@')[0] ||
+    'Student';
+
+  return (
+    <div className="student-dashboard-page animate-fade-in">
+      <div className="student-dashboard-hero">
+        <h1 className="student-dashboard-title">Welcome back, {firstName}</h1>
+        <p className="student-dashboard-subtitle">
+          Here&apos;s your case overview for today.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="student-dashboard-panel student-dashboard-loading">
+          <div className="student-dashboard-loading-copy">
+            <Loader2 className="student-loader-icon" size={20} />
+            <span>Loading dashboard...</span>
           </div>
         </div>
-
-        {loading ? (
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-10 flex items-center justify-center">
-            <div className="flex items-center gap-3 text-slate-500">
-              <Loader2 size={20} className="animate-spin" />
-              <span>Loading dashboard...</span>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {cards.map((card) => (
-              <div
-                key={card.title}
-                className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex items-center justify-between"
-              >
-                <div>
-                  <p className="text-sm font-medium text-slate-500 mb-1">
-                    {card.title}
-                  </p>
-                  <h3 className="text-3xl font-bold text-slate-900">
-                    {card.value}
-                  </h3>
+      ) : (
+        <>
+          <div className="student-stat-grid">
+            {dashboardStats.map((stat) => (
+              <div key={stat.label} className="student-stat-card">
+                <div className={`student-stat-icon ${stat.iconClassName}`}>
+                  <stat.icon size={26} />
                 </div>
 
-                <div
-                  className={`w-12 h-12 rounded-full ${card.bg} ${card.color} flex items-center justify-center`}
-                >
-                  {card.icon}
+                <div className="student-stat-copy">
+                  <p className="student-stat-value">{stat.value}</p>
+                  <p className="student-stat-label">{stat.label}</p>
                 </div>
               </div>
             ))}
           </div>
-        )}
 
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6">
-          <h2 className="text-lg font-semibold text-slate-900 mb-3">Quick Actions</h2>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              to="/cases/new"
-              className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              <PlusCircle size={16} />
-              Create New Case
-            </Link>
+          <div className="student-dashboard-columns">
+            <section className="student-dashboard-panel">
+              <div className="student-panel-header">
+                <h2 className="student-panel-title">My Cases</h2>
+                <Link to="/cases" className="student-panel-link">
+                  View all
+                </Link>
+              </div>
 
-            <Link
-              to="/cases"
-              className="inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-4 py-2.5 text-slate-800 text-sm font-medium hover:bg-slate-200 transition-colors"
-            >
-              <FolderOpen size={16} />
-              View My Cases
-            </Link>
+              <div className="student-case-list">
+                {recentCases.length === 0 ? (
+                  <div className="student-empty-state">
+                    <p className="student-empty-title">No cases yet</p>
+                    <p className="student-empty-copy">
+                      Create or get assigned to a case to see it here.
+                    </p>
+                  </div>
+                ) : (
+                  recentCases.map((caseItem) => {
+                    const badge = getCaseBadge(caseItem.status);
+
+                    return (
+                      <Link
+                        key={caseItem.id}
+                        to={`/cases/${caseItem.id}`}
+                        className="student-case-card"
+                      >
+                        <div className="student-case-copy">
+                          <p className="student-case-name">
+                            {caseItem.client_name || 'Untitled Client'}
+                          </p>
+                          <p className="student-case-meta">
+                            {caseItem.id} {'\u00B7'}{' '}
+                            {formatLabel(caseItem.case_type, 'Case')}
+                          </p>
+                        </div>
+
+                        <span className={`student-status-pill ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                      </Link>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+
+            <section className="student-dashboard-panel">
+              <div className="student-panel-header">
+                <h2 className="student-panel-title">Recent Activity</h2>
+              </div>
+
+              <div className="student-activity-list">
+                {recentCases.length === 0 ? (
+                  <div className="student-empty-state">
+                    <p className="student-empty-title">No recent activity yet</p>
+                    <p className="student-empty-copy">
+                      Activity will appear here as you work on cases.
+                    </p>
+                  </div>
+                ) : (
+                  recentCases.map((caseItem) => (
+                    <div key={caseItem.id} className="student-activity-item">
+                      <div className="student-activity-dot" />
+                      <div className="student-activity-copy">
+                        <p className="student-activity-text">
+                          Case for{' '}
+                          <span className="student-activity-emphasis">
+                            {caseItem.client_name || 'Untitled Client'}
+                          </span>{' '}
+                          is currently marked as{' '}
+                          <span className="student-activity-emphasis">
+                            {formatLabel(caseItem.status, 'Open')}
+                          </span>
+                          .
+                        </p>
+                        <p className="student-activity-date">
+                          {formatDate(caseItem.date_opened)}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

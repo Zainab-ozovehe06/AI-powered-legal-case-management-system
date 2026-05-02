@@ -19,7 +19,7 @@ const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    storageBucket: `${serviceAccount.project_id}.firebasestorage.app`,
+    storageBucket: `${serviceAccount.project_id}.appspot.com`,
   });
 }
 

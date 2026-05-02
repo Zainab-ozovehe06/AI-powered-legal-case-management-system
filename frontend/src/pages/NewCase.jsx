@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FilePlus2, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { api } from '../api/apiClient';
+
+const caseTypeOptions = [
+  { value: 'criminal', label: 'Criminal' },
+  { value: 'civil', label: 'Civil' },
+  { value: 'family', label: 'Family' },
+  { value: 'property', label: 'Property' },
+];
 
 export default function NewCase() {
   const navigate = useNavigate();
@@ -38,101 +45,85 @@ export default function NewCase() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-slate-50">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center">
-              <FilePlus2 size={20} />
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Student workspace</p>
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-                New Case
-              </h1>
-            </div>
-          </div>
-        </div>
+    <div className="new-case-page animate-fade-in">
+      <form
+        onSubmit={handleSubmit}
+        className="new-case-panel new-case-form-panel new-case-simple-form"
+      >
+        <div className="new-case-field-stack">
+          <label className="new-case-field">
+            <span className="new-case-field-label">Case Type</span>
+            <select
+              value={formData.case_type}
+              onChange={(e) =>
+                setFormData({ ...formData, case_type: e.target.value })
+              }
+              className="new-case-select"
+              required
+            >
+              {caseTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <form
-          onSubmit={handleSubmit}
-          className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-5"
-        >
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Client Name
-            </label>
+          <label className="new-case-field">
+            <span className="new-case-field-label">Client Name</span>
             <input
               type="text"
               value={formData.client_name}
               onChange={(e) =>
                 setFormData({ ...formData, client_name: e.target.value })
               }
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              className="new-case-input"
+              placeholder="e.g. John Mukasa"
               required
             />
-          </div>
+          </label>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Case Type
-            </label>
-            <select
-              value={formData.case_type}
-              onChange={(e) =>
-                setFormData({ ...formData, case_type: e.target.value })
-              }
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              required
-            >
-              <option value="criminal">Criminal</option>
-              <option value="civil">Civil</option>
-              <option value="family">Family</option>
-              <option value="property">Property</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Offence / Matter
-            </label>
+          <label className="new-case-field">
+            <span className="new-case-field-label">Offence / Matter</span>
             <input
               type="text"
               value={formData.offence}
               onChange={(e) =>
                 setFormData({ ...formData, offence: e.target.value })
               }
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              className="new-case-input"
+              placeholder="e.g. Bail application, custody dispute, land disagreement"
               required
             />
-          </div>
+          </label>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Description
-            </label>
+          <label className="new-case-field">
+            <span className="new-case-field-label">Description</span>
             <textarea
               value={formData.description}
               onChange={(e) =>
                 setFormData({ ...formData, description: e.target.value })
               }
-              rows={5}
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              rows={6}
+              className="new-case-textarea"
+              placeholder="Add any notes or background details for this matter."
             />
-          </div>
+          </label>
+        </div>
 
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={isCreating}
-              className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-white font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-70"
-            >
-              {isCreating ? <Loader2 size={18} className="animate-spin" /> : <FilePlus2 size={18} />}
-              {isCreating ? 'Creating...' : 'Create Case'}
-            </button>
-          </div>
-        </form>
-      </div>
+        <div className="new-case-action-bar new-case-simple-actions">
+          <button
+            type="submit"
+            disabled={isCreating}
+            className="new-case-primary-button"
+          >
+            {isCreating ? (
+              <Loader2 size={18} className="student-loader-icon" />
+            ) : null}
+            {isCreating ? 'Creating...' : 'Create Case'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

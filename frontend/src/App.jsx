@@ -12,7 +12,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
 import TestAuth from './pages/TestAuth';
 import ManageUsers from './pages/Manageusers';
-import AdminCaseProgress from './pages/AdminCaseProgress';
 import AdminSettings from './pages/AdminSettings';
 import StudentCases from './pages/StudentCases';
 import NewCase from './pages/NewCase';
@@ -91,14 +90,7 @@ function App() {
               </RoleProtectedRoute>
             }
           />
-          <Route
-  path="admin/progress"
-  element={
-    <RoleProtectedRoute allowedRoles={['admin']}>
-      <AdminCaseProgress />
-    </RoleProtectedRoute>
-  }
-/>
+        
 <Route
   path="admin/settings"
   element={

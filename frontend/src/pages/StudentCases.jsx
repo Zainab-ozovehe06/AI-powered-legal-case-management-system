@@ -1,7 +1,96 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FolderOpen, Loader2, Search } from 'lucide-react';
+import { ArrowUpRight, Loader2, Search } from 'lucide-react';
 import { api } from '../api/apiClient';
+
+const formatLabel = (value, fallback) => {
+  const safeValue = (value || fallback || '').toString().trim();
+
+  if (!safeValue) {
+    return fallback;
+  }
+
+  return safeValue
+    .replace(/[_-]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
+const formatDate = (value) => {
+  const date = value?.toDate?.();
+
+  if (!date) {
+    return 'No date available';
+  }
+
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+};
+
+const getCaseTypeClass = (caseType) => {
+  const normalized = (caseType || '').toLowerCase();
+
+  if (normalized === 'criminal') {
+    return 'student-case-type-criminal';
+  }
+
+  if (normalized === 'civil') {
+    return 'student-case-type-civil';
+  }
+
+  if (normalized === 'family') {
+    return 'student-case-type-family';
+  }
+
+  if (normalized === 'property') {
+    return 'student-case-type-property';
+  }
+
+  return 'student-case-type-default';
+};
+
+const getStatusClass = (status) => {
+  const normalized = (status || 'open').toLowerCase();
+
+  if (normalized === 'closed') {
+    return 'student-case-status-closed';
+  }
+
+  if (normalized === 'urgent') {
+    return 'student-case-status-urgent';
+  }
+
+  return 'student-case-status-open';
+};
+
+const getLifecycleStepIndex = (status) => {
+  const normalized = (status || 'open').toLowerCase();
+
+  if (normalized === 'closed') {
+    return 4;
+  }
+
+  if (
+    normalized.includes('court') ||
+    normalized.includes('hearing') ||
+    normalized.includes('trial')
+  ) {
+    return 3;
+  }
+
+  if (normalized.includes('intake') || normalized.includes('new')) {
+    return 1;
+  }
+
+  return 2;
+};
+
+const lifecycleLabels = ['Intake', 'Active Review', 'Current Status', 'Outcome'];
 
 export default function StudentCases() {
   const navigate = useNavigate();
@@ -39,123 +128,184 @@ export default function StudentCases() {
 
     if (!term) return cases;
 
-    return cases.filter((c) => {
+    return cases.filter((caseItem) => {
       return (
-        (c.client_name || '').toLowerCase().includes(term) ||
-        (c.case_type || '').toLowerCase().includes(term) ||
-        (c.offence || '').toLowerCase().includes(term) ||
-        (c.status || '').toLowerCase().includes(term)
+        (caseItem.client_name || '').toLowerCase().includes(term) ||
+        (caseItem.case_type || '').toLowerCase().includes(term) ||
+        (caseItem.offence || '').toLowerCase().includes(term) ||
+        (caseItem.status || '').toLowerCase().includes(term)
       );
     });
   }, [cases, searchTerm]);
 
-  const getStatusClass = (status) => {
-    const normalized = (status || 'open').toLowerCase();
-
-    if (normalized === 'closed') {
-      return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
-    }
-
-    return 'bg-amber-50 text-amber-700 border border-amber-200';
-  };
-
   return (
-    <div className="w-full min-h-screen bg-slate-50">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6">
-          <div className="flex flex-col gap-2">
-            <p className="text-sm text-slate-500">Student workspace</p>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-              Cases
-            </h1>
-            <p className="text-slate-500 text-sm sm:text-base">
-              View and open your assigned cases
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
-          <div className="relative">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-            <input
-              type="text"
-              placeholder="Search by client, case type, offence, or status..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-2xl border border-slate-300 pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {loading ? (
-            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-8 text-center text-slate-500 flex items-center justify-center gap-2">
-              <Loader2 size={18} className="animate-spin" />
-              Loading cases...
-            </div>
-          ) : filteredCases.length === 0 ? (
-            <div className="rounded-2xl bg-slate-50 border border-dashed border-slate-300 p-8 text-center">
-              <p className="text-slate-600 font-medium">No cases yet</p>
-              <p className="text-sm text-slate-500 mt-1">
-                Create or get assigned to a case to see it here.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredCases.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => navigate(`/cases/${c.id}`)}
-                  className="w-full text-left rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                          <FolderOpen size={16} />
-                        </div>
-
-                        <div className="min-w-0">
-                          <h3 className="font-semibold text-slate-900 break-words">
-                            {c.client_name || 'Untitled Client'}
-                          </h3>
-                          <p className="text-sm text-slate-600 capitalize break-words">
-                            {c.case_type || 'Case'}
-                          </p>
-                        </div>
-
-                        <span
-                          className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusClass(
-                            c.status
-                          )}`}
-                        >
-                          {c.status || 'open'}
-                        </span>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-slate-600">
-                        <p>
-                          <span className="text-slate-500">Offence:</span>{' '}
-                          {c.offence || 'General matter'}
-                        </p>
-                        <p>
-                          <span className="text-slate-500">Opened:</span>{' '}
-                          {c.date_opened?.toDate?.()?.toLocaleDateString?.() || 'N/A'}
-                        </p>
-                        <p>
-                          <span className="text-slate-500">Case ID:</span> {c.id}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+    <div className="student-cases-page animate-fade-in">
+      <div className="student-cases-hero">
+        <div>
+          <h1 className="student-cases-title">Cases</h1>
+          <p className="student-cases-subtitle">
+            Review assigned matters and open any case to continue your work.
+          </p>
         </div>
       </div>
+
+      <section className="student-cases-toolbar">
+        <label className="student-cases-search">
+          <Search size={18} className="student-cases-search-icon" />
+          <input
+            type="text"
+            placeholder="Search by client, case type, offence, or status..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="student-cases-search-input"
+          />
+        </label>
+
+        <div className="student-cases-summary">
+          <span className="student-cases-summary-value">{filteredCases.length}</span>
+          <span className="student-cases-summary-label">
+            {filteredCases.length === 1 ? 'case visible' : 'cases visible'}
+          </span>
+        </div>
+      </section>
+
+      {loading ? (
+        <div className="student-cases-panel student-cases-feedback">
+          <Loader2 size={20} className="student-loader-icon" />
+          <span>Loading cases...</span>
+        </div>
+      ) : filteredCases.length === 0 ? (
+        <div className="student-cases-panel student-cases-empty">
+          <p className="student-empty-title">No cases yet</p>
+          <p className="student-empty-copy">
+            Create or get assigned to a case to see it here.
+          </p>
+        </div>
+      ) : (
+        <div className="student-cases-list">
+          {filteredCases.map((caseItem) => {
+            const lifecycleIndex = getLifecycleStepIndex(caseItem.status);
+
+            return (
+              <button
+                key={caseItem.id}
+                type="button"
+                onClick={() => navigate(`/cases/${caseItem.id}`)}
+                className="student-cases-card"
+              >
+                <div className="student-cases-card-header">
+                  <div className="student-cases-card-heading">
+                    <h2 className="student-cases-card-title">
+                      {caseItem.client_name || 'Untitled Client'}
+                    </h2>
+                    <p className="student-cases-card-meta">
+                      {caseItem.id} {'\u00B7'} {caseItem.offence || 'General matter'}
+                    </p>
+                  </div>
+
+                  <div className="student-cases-card-badges">
+                    <span
+                      className={`student-case-type-pill ${getCaseTypeClass(
+                        caseItem.case_type
+                      )}`}
+                    >
+                      {formatLabel(caseItem.case_type, 'Case')}
+                    </span>
+                    <span
+                      className={`student-case-status-tag ${getStatusClass(
+                        caseItem.status
+                      )}`}
+                    >
+                      {formatLabel(caseItem.status, 'Open')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="student-cases-card-grid">
+                  <div className="student-cases-detail">
+                    <span className="student-cases-detail-label">Offence / Matter</span>
+                    <p className="student-cases-detail-value">
+                      {caseItem.offence || 'General matter'}
+                    </p>
+                  </div>
+
+                  <div className="student-cases-detail">
+                    <span className="student-cases-detail-label">Date Opened</span>
+                    <p className="student-cases-detail-value">
+                      {formatDate(caseItem.date_opened)}
+                    </p>
+                  </div>
+
+                  <div className="student-cases-detail">
+                    <span className="student-cases-detail-label">Case ID</span>
+                    <p className="student-cases-detail-value">{caseItem.id}</p>
+                  </div>
+
+                  <div className="student-cases-detail">
+                    <span className="student-cases-detail-label">Current Status</span>
+                    <p className="student-cases-detail-value">
+                      {formatLabel(caseItem.status, 'Open')}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="student-cases-lifecycle">
+                  {lifecycleLabels.map((label, index) => {
+                    const stepNumber = index + 1;
+                    const isComplete = stepNumber < lifecycleIndex;
+                    const isCurrent = stepNumber === lifecycleIndex;
+
+                    return (
+                      <div
+                        key={`${caseItem.id}-${label}`}
+                        className="student-cases-step"
+                      >
+                        <div className="student-cases-step-track">
+                          <span
+                            className={`student-cases-step-circle${
+                              isComplete ? ' is-complete' : ''
+                            }${isCurrent ? ' is-current' : ''}`}
+                          >
+                            {stepNumber}
+                          </span>
+
+                          {stepNumber !== lifecycleLabels.length ? (
+                            <span
+                              className={`student-cases-step-line${
+                                stepNumber < lifecycleIndex ? ' is-complete' : ''
+                              }`}
+                            />
+                          ) : null}
+                        </div>
+
+                        <div className="student-cases-step-copy">
+                          <span
+                            className={`student-cases-step-label${
+                              isCurrent ? ' is-current' : ''
+                            }`}
+                          >
+                            {label}
+                          </span>
+                          {isCurrent && stepNumber === 3 ? (
+                            <span className="student-cases-step-caption">
+                              {formatLabel(caseItem.status, 'Open')}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="student-cases-card-footer">
+                  <span className="student-cases-card-action">Open case</span>
+                  <ArrowUpRight size={18} />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
