@@ -1,7 +1,141 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FolderOpen, Loader2, Search } from 'lucide-react';
+import { Check, Loader2, Search } from 'lucide-react';
 import { api } from '../api/apiClient';
+
+const formatLabel = (value, fallback) => {
+  const safeValue = (value || fallback || '').toString().trim();
+
+  if (!safeValue) {
+    return fallback;
+  }
+
+  return safeValue
+    .replace(/[_-]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
+const getTimestampMillis = (value) => {
+  if (!value) return 0;
+
+  if (typeof value.toMillis === 'function') {
+    return value.toMillis();
+  }
+
+  if (typeof value.toDate === 'function') {
+    return value.toDate().getTime();
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  if (typeof value._seconds === 'number') {
+    return value._seconds * 1000 + Math.floor((value._nanoseconds || 0) / 1000000);
+  }
+
+  if (typeof value.seconds === 'number') {
+    return value.seconds * 1000 + Math.floor((value.nanoseconds || 0) / 1000000);
+  }
+
+  return 0;
+};
+
+const formatDate = (value, fallback = 'Not scheduled') => {
+  const millis = getTimestampMillis(value);
+
+  if (!millis) {
+    return fallback;
+  }
+
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(millis));
+};
+
+const formatValue = (value, fallback = 'Not recorded') => {
+  if (Array.isArray(value)) {
+    const joined = value.filter(Boolean).join(', ');
+    return joined || fallback;
+  }
+
+  const safeValue = (value || '').toString().trim();
+  return safeValue || fallback;
+};
+
+const getFirstValue = (item, keys, fallback = 'Not recorded') => {
+  for (const key of keys) {
+    if (item?.[key]) {
+      return formatValue(item[key], fallback);
+    }
+  }
+
+  return fallback;
+};
+
+const getCaseTypeClass = (caseType) => {
+  const normalized = (caseType || '').toLowerCase();
+
+  if (normalized === 'criminal') return 'admin-cases-type-criminal';
+  if (normalized === 'civil') return 'admin-cases-type-civil';
+  if (normalized === 'family') return 'admin-cases-type-family';
+  if (normalized === 'property') return 'admin-cases-type-property';
+
+  return 'admin-cases-type-default';
+};
+
+const getStageNumber = (caseItem) => {
+  const stageValue =
+    caseItem.progress_stage ||
+    caseItem.current_stage ||
+    caseItem.stage ||
+    caseItem.case_stage ||
+    caseItem.status ||
+    'intake';
+
+  const numericStage = Number(stageValue);
+
+  if (Number.isInteger(numericStage) && numericStage >= 1 && numericStage <= 4) {
+    return numericStage;
+  }
+
+  const normalized = stageValue.toString().toLowerCase().replace(/[_-]+/g, ' ');
+
+  if (normalized.includes('closed') || normalized.includes('outcome')) return 4;
+  if (
+    normalized.includes('court') ||
+    normalized.includes('hearing') ||
+    normalized.includes('trial')
+  ) {
+    return 3;
+  }
+  if (
+    normalized.includes('investigation') ||
+    normalized.includes('assigned') ||
+    normalized.includes('urgent')
+  ) {
+    return 2;
+  }
+
+  return 1;
+};
+
+const caseStages = [
+  { number: 1, label: 'Intake' },
+  { number: 2, label: 'Investigation' },
+  { number: 3, label: 'In Court' },
+  { number: 4, label: 'Outcome' },
+];
 
 export default function AdminAllCases() {
   const navigate = useNavigate();
@@ -49,110 +183,148 @@ export default function AdminAllCases() {
     });
   }, [cases, searchTerm]);
 
-  const getStatusClass = (status) => {
-    const normalized = (status || 'open').toLowerCase();
-
-    if (normalized === 'closed') {
-      return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
-    }
-
-    return 'bg-amber-50 text-amber-700 border border-amber-200';
-  };
-
   return (
-    <div className="w-full min-h-screen bg-slate-50">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6">
-          <div className="flex flex-col gap-2">
-            <p className="text-sm text-slate-500">Admin workspace</p>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-              All Cases
-            </h1>
-            <p className="text-slate-500 text-sm sm:text-base">
-              System-wide case visibility across the clinic
-            </p>
-          </div>
+    <div className="admin-cases-page animate-fade-in">
+      <div className="admin-cases-hero">
+        <h1 className="admin-cases-title">Cases</h1>
+
+        <label className="admin-cases-search" aria-label="Search cases">
+          <Search size={18} className="admin-cases-search-icon" />
+          <input
+            type="text"
+            placeholder="Search by client, case type, offence, or status..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="admin-cases-search-input"
+          />
+        </label>
+      </div>
+
+      {loading ? (
+        <div className="admin-cases-feedback">
+          <Loader2 size={20} className="admin-cases-loader" />
+          <span>Loading cases...</span>
         </div>
+      ) : filteredCases.length === 0 ? (
+        <div className="admin-cases-empty">
+          <p>No cases found</p>
+        </div>
+      ) : (
+        <div className="admin-cases-list">
+          {filteredCases.map((c) => {
+            const activeStage = getStageNumber(c);
+            const caseTypeLabel = formatLabel(c.case_type, 'Case');
+            const court = getFirstValue(c, ['court', 'court_name', 'courtName']);
+            const assigned = getFirstValue(c, [
+              'assigned_to_name',
+              'assigned_to',
+              'assigned_student_name',
+              'assigned_student',
+            ], 'Unassigned');
+            const relatives = getFirstValue(c, [
+              'relatives',
+              'relative_names',
+              'next_of_kin',
+              'family_contacts',
+            ]);
+            const nextHearing =
+              c.next_hearing_date ||
+              c.next_hearing ||
+              c.hearing_date ||
+              c.court_date ||
+              null;
 
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
-          <div className="relative">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-            <input
-              type="text"
-              placeholder="Search by client, case type, offence, or status..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-2xl border border-slate-300 pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => navigate(`/cases/${c.id}`)}
+                className="admin-cases-card"
+              >
+                <div className="admin-cases-card-top">
+                  <div className="admin-cases-card-copy">
+                    <h2 className="admin-cases-card-title">
+                      {c.client_name || 'Untitled Client'}
+                    </h2>
+                    <p className="admin-cases-card-subtitle">
+                      {c.id} {'\u00B7'} {c.offence || 'General matter'}
+                    </p>
+                  </div>
 
-          {loading ? (
-            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-8 text-center text-slate-500 flex items-center justify-center gap-2">
-              <Loader2 size={18} className="animate-spin" />
-              Loading cases...
-            </div>
-          ) : filteredCases.length === 0 ? (
-            <div className="rounded-2xl bg-slate-50 border border-dashed border-slate-300 p-8 text-center">
-              <p className="text-slate-600 font-medium">No cases found</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredCases.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => navigate(`/cases/${c.id}`)}
-                  className="w-full text-left rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                          <FolderOpen size={16} />
-                        </div>
+                  <span
+                    className={`admin-cases-type-pill ${getCaseTypeClass(
+                      c.case_type
+                    )}`}
+                  >
+                    {caseTypeLabel}
+                  </span>
+                </div>
 
-                        <div className="min-w-0">
-                          <h3 className="font-semibold text-slate-900 break-words">
-                            {c.client_name || 'Untitled Client'}
-                          </h3>
-                          <p className="text-sm text-slate-600 capitalize break-words">
-                            {c.case_type || 'Case'}
-                          </p>
+                <div className="admin-cases-detail-grid">
+                  <div className="admin-cases-detail-item">
+                    <span className="admin-cases-detail-label">Court</span>
+                    <span className="admin-cases-detail-value">{court}</span>
+                  </div>
+
+                  <div className="admin-cases-detail-item">
+                    <span className="admin-cases-detail-label">Assigned</span>
+                    <span className="admin-cases-detail-value">{assigned}</span>
+                  </div>
+
+                  <div className="admin-cases-detail-item">
+                    <span className="admin-cases-detail-label">Relatives</span>
+                    <span className="admin-cases-detail-value">{relatives}</span>
+                  </div>
+
+                  <div className="admin-cases-detail-item">
+                    <span className="admin-cases-detail-label">Next Hearing</span>
+                    <span className="admin-cases-detail-value admin-cases-hearing-value">
+                      {formatDate(nextHearing)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="admin-cases-stage-row">
+                  {caseStages.map((stage, index) => {
+                    const isComplete = stage.number < activeStage;
+                    const isCurrent = stage.number === activeStage;
+                    const isLast = index === caseStages.length - 1;
+
+                    return (
+                      <div key={stage.number} className="admin-cases-stage">
+                        <div className="admin-cases-stage-track">
+                          <span
+                            className={`admin-cases-stage-circle${
+                              isComplete ? ' is-complete' : ''
+                            }${isCurrent ? ' is-current' : ''}`}
+                          >
+                            {isComplete ? <Check size={16} /> : stage.number}
+                          </span>
+                          {!isLast ? (
+                            <span
+                              className={`admin-cases-stage-line${
+                                isComplete ? ' is-complete' : ''
+                              }`}
+                            />
+                          ) : null}
                         </div>
 
                         <span
-                          className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusClass(
-                            c.status
-                          )}`}
+                          className={`admin-cases-stage-label${
+                            isCurrent ? ' is-current' : ''
+                          }`}
                         >
-                          {c.status || 'open'}
+                          {stage.label}
                         </span>
                       </div>
-
-                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-slate-600">
-                        <p>
-                          <span className="text-slate-500">Offence:</span>{' '}
-                          {c.offence || 'General matter'}
-                        </p>
-                        <p>
-                          <span className="text-slate-500">Opened:</span>{' '}
-                          {c.date_opened?.toDate?.()?.toLocaleDateString?.() || 'N/A'}
-                        </p>
-                        <p>
-                          <span className="text-slate-500">Case ID:</span> {c.id}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+                    );
+                  })}
+                </div>
+              </button>
+            );
+          })}
         </div>
-      </div>
+      )}
     </div>
   );
 }

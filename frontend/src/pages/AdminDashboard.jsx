@@ -53,81 +53,62 @@ export default function AdminDashboard() {
     {
       title: 'Total Cases',
       value: summary.totalCases,
-      icon: <FolderOpen size={20} />,
-      color: 'text-blue-600',
-      bg: 'bg-blue-100',
+      icon: <FolderOpen size={26} />,
+      iconClassName: 'admin-stat-icon-primary',
     },
     {
       title: 'Open Cases',
       value: summary.openCases,
-      icon: <Clock3 size={20} />,
-      color: 'text-amber-600',
-      bg: 'bg-amber-100',
+      icon: <Clock3 size={26} />,
+      iconClassName: 'admin-stat-icon-warning',
     },
     {
       title: 'Closed Cases',
       value: summary.closedCases,
-      icon: <CheckCircle2 size={20} />,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-100',
+      icon: <CheckCircle2 size={26} />,
+      iconClassName: 'admin-stat-icon-success',
     },
     {
       title: 'Active Users',
       value: summary.activeUsers,
-      icon: <Users size={20} />,
-      color: 'text-indigo-600',
-      bg: 'bg-indigo-100',
+      icon: <Users size={26} />,
+      iconClassName: 'admin-stat-icon-muted',
     },
   ];
 
   return (
-    <div className="w-full min-h-screen bg-slate-50">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6">
-          <div className="flex flex-col gap-2">
-            <p className="text-sm text-slate-500">Admin workspace</p>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-              Clinic Overview
-            </h1>
-            <p className="text-slate-500 text-sm sm:text-base">
-              Summary of users and cases across the system
-            </p>
+    <div className="admin-dashboard-page animate-fade-in">
+      <div className="admin-dashboard-hero">
+        <p className="admin-dashboard-eyebrow">Admin workspace</p>
+        <h1 className="admin-dashboard-title">Clinic Overview</h1>
+        <p className="admin-dashboard-subtitle">
+          Summary of users and cases across the system
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="admin-dashboard-panel admin-dashboard-loading">
+          <div className="admin-dashboard-loading-copy">
+            <Loader2 size={20} className="admin-loader-icon" />
+            <span>Loading dashboard summary...</span>
           </div>
         </div>
-
-        {loading ? (
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-10 flex items-center justify-center">
-            <div className="flex items-center gap-3 text-slate-500">
-              <Loader2 size={20} className="animate-spin" />
-              <span>Loading dashboard summary...</span>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            {cards.map((card) => (
-              <div
-                key={card.title}
-                className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex items-center justify-between"
-              >
-                <div>
-                  <p className="text-sm font-medium text-slate-500 mb-1">
-                    {card.title}
-                  </p>
-                  <h3 className="text-3xl font-bold text-slate-900">
-                    {card.value}
-                  </h3>
-                </div>
-
-                <div
-                  className={`w-12 h-12 rounded-full ${card.bg} ${card.color} flex items-center justify-center`}
-                >
-                  {card.icon}
-                </div>
+      ) : (
+        <div className="admin-stat-grid">
+          {cards.map((card) => (
+            <div key={card.title} className="admin-stat-card">
+              <div className={`admin-stat-icon ${card.iconClassName}`}>
+                {card.icon}
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+
+              <div className="admin-stat-copy">
+                <p className="admin-stat-value">{card.value}</p>
+                <p className="admin-stat-label">{card.title}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

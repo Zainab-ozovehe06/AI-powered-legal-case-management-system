@@ -4,25 +4,25 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { useAuth } from '../../context/AuthContext';
 
-
 export const AppLayout = () => {
-    const [collapsed, setCollapsed] = useState(false);
-    const { currentUser } = useAuth();
+  const [collapsed, setCollapsed] = useState(false);
+  const { currentUser, userRole } = useAuth();
 
-    if (!currentUser) {
-        return <Navigate to="/login" replace />;
-    }
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
 
-    return (
-        <div className="app-container">
-            <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
-            <div className="main-content">
-                <Topbar />
-                <main className="page-content bg-slate-50/50">
-                    <Outlet />
-                </main>
-            </div>
-    
-        </div>
-    );
+  const isStudentPortalView = userRole === 'law_student';
+
+  return (
+    <div className={`app-container${isStudentPortalView ? ' student-dashboard-layout' : ''}`}>
+      <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
+      <div className="main-content">
+        <Topbar collapsed={collapsed} setCollapsed={setCollapsed} />
+        <main className={`page-content${isStudentPortalView ? ' student-dashboard-page-content' : ''}`}>
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
 };

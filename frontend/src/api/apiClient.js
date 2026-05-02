@@ -2,14 +2,33 @@ import { auth } from '../services/firebase';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
-const getAuthHeaders = async () => {
+const getCurrentUserToken = async () => {
   const user = auth.currentUser;
 
   if (!user) {
     throw new Error('User is not authenticated');
   }
 
-  const token = await user.getIdToken();
+  return user.getIdToken();
+};
+
+const getErrorMessage = async (response) => {
+  const text = await response.text();
+
+  if (!text) {
+    return response.statusText || 'Request failed';
+  }
+
+  try {
+    const data = JSON.parse(text);
+    return data.error || data.message || response.statusText || 'Request failed';
+  } catch {
+    return text;
+  }
+};
+
+const getAuthHeaders = async () => {
+  const token = await getCurrentUserToken();
 
   return {
     'Content-Type': 'application/json',
@@ -74,16 +93,13 @@ export const api = {
 
   // Documents
   uploadDocument: async (caseId, file) => {
-    const user = auth.currentUser;
-    if (!user) throw new Error('User is not authenticated');
-
-    const token = await user.getIdToken();
+    const token = await getCurrentUserToken();
 
     const formData = new FormData();
     formData.append('case_id', caseId);
     formData.append('file', file);
 
-    const response = await fetch(`${API_BASE_URL}/documents/upload`, {
+    const response = await fetch(`${API_BASE_URL}/documents/${caseId}/upload`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -91,20 +107,41 @@ export const api = {
       body: formData,
     });
 
-    const text = await response.text();
-
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      throw new Error(text || 'Server returned a non-JSON response');
+    if (!response.ok) {
+      throw new Error(await getErrorMessage(response));
     }
+
+    return response.json();
+  },
+
+  openDocument: async (documentId, fileName = 'document') => {
+    const token = await getCurrentUserToken();
+
+    const response = await fetch(`${API_BASE_URL}/documents/${documentId}/download`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
     if (!response.ok) {
-      throw new Error(data.error || 'Failed to upload document');
+      throw new Error(await getErrorMessage(response));
     }
 
-    return data;
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const openedWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+
+    if (!openedWindow) {
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+
+    window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
   },
 
   getUsers: async () => {

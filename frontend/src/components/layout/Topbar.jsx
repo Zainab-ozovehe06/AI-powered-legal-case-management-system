@@ -1,37 +1,104 @@
-import { Bell, Search } from 'lucide-react';
+import { Bell, ChevronDown, Search } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
-export const Topbar = () => {
-    const location = useLocation();
-    const pathName = location.pathname;
+const roleLabelMap = {
+  admin: 'Admin',
+  law_student: 'Student',
+};
 
-    let breadcrumb = 'Home';
-    if (pathName.includes('cases')) breadcrumb = 'Home > Cases';
-    else if (pathName.includes('calendar')) breadcrumb = 'Home > Calendar';
-    else if (pathName.includes('documents')) breadcrumb = 'Home > Documents';
-    else if (pathName.includes('ai')) breadcrumb = 'Home > AI Assistant';
+const getInitials = (value) => {
+  const safeValue = (value || '').trim();
+
+  if (!safeValue) {
+    return 'ST';
+  }
+
+  const parts = safeValue.split(/\s+/).filter(Boolean);
+
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+
+  return safeValue.slice(0, 2).toUpperCase();
+};
+
+export const Topbar = ({ collapsed, setCollapsed }) => {
+  const { currentUser, userRole } = useAuth();
+  const location = useLocation();
+  const pathName = location.pathname;
+
+  const isStudentPortalView = userRole === 'law_student';
+
+  let breadcrumb = 'Home';
+  if (pathName.includes('cases')) breadcrumb = 'Home > Cases';
+  else if (pathName.includes('calendar')) breadcrumb = 'Home > Calendar';
+  else if (pathName.includes('documents')) breadcrumb = 'Home > Documents';
+  else if (pathName.includes('ai')) breadcrumb = 'Home > AI Assistant';
+
+  if (isStudentPortalView) {
+    const displayName =
+      currentUser?.displayName ||
+      currentUser?.name ||
+      currentUser?.email ||
+      'Student';
 
     return (
-        <header className="topbar">
-            <div className="flex items-center gap-2 text-muted text-sm font-medium">
-                <span>{breadcrumb}</span>
-            </div>
+      <header className="topbar student-dashboard-topbar">
+        <div className="student-topbar-left">
+          <button
+            type="button"
+            className="student-sidebar-toggle"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            <span className="student-sidebar-toggle-glyph" aria-hidden="true">
+              <span />
+              <span />
+            </span>
+          </button>
 
-            <div className="flex items-center gap-4">
-                <div className="relative hidden md:block">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
-                    <input
-                        type="text"
-                        placeholder="Search users, cases, docs..."
-                        className="input-field py-1.5 pl-9 rounded-full w-64 border-slate-200"
-                    />
-                </div>
+          <label className="student-topbar-search" aria-label="Search">
+            <Search size={20} className="student-topbar-search-icon" />
+            <input
+              type="text"
+              placeholder="Search cases, clients..."
+              className="student-topbar-search-input"
+            />
+          </label>
+        </div>
 
-                <button className="btn-icon relative text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors">
-                    <Bell size={20} />
-                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 border border-white"></span>
-                </button>
-            </div>
-        </header>
+        <div className="student-topbar-right">
+          <button type="button" className="student-role-button">
+            <span>{roleLabelMap[userRole] || 'Student'}</span>
+            <ChevronDown size={18} />
+          </button>
+
+          <div className="student-topbar-avatar">
+            {getInitials(displayName)}
+          </div>
+        </div>
+      </header>
     );
+  }
+
+  return (
+    <header className="topbar">
+      <div className="topbar-breadcrumb">
+        <span>{breadcrumb}</span>
+      </div>
+
+      <div className="topbar-actions">
+        <label className="topbar-search">
+          <Search className="topbar-search-icon" size={16} />
+          <input
+            type="text"
+            placeholder="Search users, cases, docs..."
+            className="input-field topbar-search-input-generic"
+          />
+        </label>
+
+      </div>
+    </header>
+  );
 };

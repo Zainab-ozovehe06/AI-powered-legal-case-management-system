@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Settings as SettingsIcon, Save } from 'lucide-react';
+import {
+  Building2,
+  Clock3,
+  FolderOpen,
+  Loader2,
+  Save,
+  Settings as SettingsIcon,
+  ShieldCheck,
+} from 'lucide-react';
 import { api } from '../api/apiClient';
 
 export default function AdminSettings() {
@@ -61,99 +69,129 @@ export default function AdminSettings() {
 
   if (loading) {
     return (
-      <div className="w-full min-h-screen bg-slate-50">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-10 flex items-center justify-center gap-3 text-slate-500">
-            <Loader2 size={20} className="animate-spin" />
-            Loading settings...
-          </div>
+      <div className="admin-settings-page animate-fade-in">
+        <div className="admin-settings-feedback">
+          <Loader2 size={20} className="admin-settings-loader" />
+          <span>Loading settings...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full min-h-screen bg-slate-50">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
-              <SettingsIcon size={20} />
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Admin workspace</p>
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-                Settings
-              </h1>
-            </div>
-          </div>
+    <div className="admin-settings-page animate-fade-in">
+      <section className="admin-settings-hero">
+        <div className="admin-settings-hero-copy">
+          <span className="admin-settings-eyebrow">Admin workspace</span>
+          <h1 className="admin-settings-title">Settings</h1>
+          <p className="admin-settings-subtitle">
+            Configure the clinic defaults used across the system.
+          </p>
         </div>
 
-        <form
-          onSubmit={handleSave}
-          className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-6"
-        >
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Clinic Name
-            </label>
-            <input
-              type="text"
-              value={formData.clinic_name}
-              onChange={(e) =>
-                setFormData({ ...formData, clinic_name: e.target.value })
-              }
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-            />
+        <div className="admin-settings-hero-icon" aria-hidden="true">
+          <SettingsIcon size={22} />
+        </div>
+      </section>
+
+      <form onSubmit={handleSave} className="admin-settings-layout">
+        <section className="admin-settings-panel admin-settings-form-panel">
+          <div className="admin-settings-panel-header">
+            <div>
+              <h2 className="admin-settings-panel-title">System Preferences</h2>
+              <p className="admin-settings-panel-subtitle">
+                Keep the core clinic settings consistent for every workspace.
+              </p>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Default Case Status
+          <div className="admin-settings-field-stack">
+            <label className="admin-settings-field">
+              <span className="admin-settings-field-icon">
+                <Building2 size={18} />
+              </span>
+              <span className="admin-settings-field-copy">
+                <span className="admin-settings-field-label">Clinic Name</span>
+                <input
+                  type="text"
+                  value={formData.clinic_name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, clinic_name: e.target.value })
+                  }
+                  className="admin-settings-input"
+                />
+              </span>
             </label>
-            <select
-              value={formData.default_case_status}
-              onChange={(e) =>
-                setFormData({ ...formData, default_case_status: e.target.value })
-              }
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              <option value="open">Open</option>
-              <option value="closed">Closed</option>
-            </select>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Case Inactivity Threshold (Days)
+            <label className="admin-settings-field">
+              <span className="admin-settings-field-icon">
+                <FolderOpen size={18} />
+              </span>
+              <span className="admin-settings-field-copy">
+                <span className="admin-settings-field-label">
+                  Default Case Status
+                </span>
+                <select
+                  value={formData.default_case_status}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      default_case_status: e.target.value,
+                    })
+                  }
+                  className="admin-settings-select"
+                >
+                  <option value="open">Open</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </span>
             </label>
-            <input
-              type="number"
-              min="1"
-              value={formData.inactivity_threshold_days}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  inactivity_threshold_days: e.target.value,
-                })
-              }
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Used to flag cases that have not been updated recently.
-            </p>
-          </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="font-medium text-slate-900">Allow New User Registration</p>
-                <p className="text-sm text-slate-500">
-                  Turn this off if admins should manually control onboarding.
-                </p>
+            <label className="admin-settings-field">
+              <span className="admin-settings-field-icon">
+                <Clock3 size={18} />
+              </span>
+              <span className="admin-settings-field-copy">
+                <span className="admin-settings-field-label">
+                  Case Inactivity Threshold
+                </span>
+                <span className="admin-settings-number-row">
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.inactivity_threshold_days}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        inactivity_threshold_days: e.target.value,
+                      })
+                    }
+                    className="admin-settings-number-input"
+                  />
+                  <span className="admin-settings-number-unit">days</span>
+                </span>
+                <span className="admin-settings-field-help">
+                  Used to flag cases that have not been updated recently.
+                </span>
+              </span>
+            </label>
+
+            <div className="admin-settings-toggle-card">
+              <div className="admin-settings-toggle-copy">
+                <span className="admin-settings-field-icon">
+                  <ShieldCheck size={18} />
+                </span>
+                <div>
+                  <p className="admin-settings-toggle-title">
+                    Allow New User Registration
+                  </p>
+                  <p className="admin-settings-toggle-help">
+                    Turn this off if admins should manually control onboarding.
+                  </p>
+                </div>
               </div>
 
-              <label className="inline-flex items-center cursor-pointer">
+              <label className="admin-settings-switch">
                 <input
                   type="checkbox"
                   checked={formData.allow_registration}
@@ -163,24 +201,69 @@ export default function AdminSettings() {
                       allow_registration: e.target.checked,
                     })
                   }
-                  className="w-4 h-4"
+                  className="admin-settings-switch-input"
                 />
+                <span className="admin-settings-switch-track">
+                  <span className="admin-settings-switch-thumb" />
+                </span>
               </label>
             </div>
           </div>
 
-          <div className="flex justify-end">
+          <div className="admin-settings-actions">
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-white font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-70"
+              className="admin-settings-save-button"
             >
-              {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+              {saving ? (
+                <Loader2 size={18} className="admin-settings-loader" />
+              ) : (
+                <Save size={18} />
+              )}
               {saving ? 'Saving...' : 'Save Settings'}
             </button>
           </div>
-        </form>
-      </div>
+        </section>
+
+        <aside className="admin-settings-panel admin-settings-summary-panel">
+          <h2 className="admin-settings-panel-title">Current Defaults</h2>
+          <p className="admin-settings-panel-subtitle">
+            A quick preview of what will be applied after saving.
+          </p>
+
+          <div className="admin-settings-summary-list">
+            <div className="admin-settings-summary-item">
+              <span className="admin-settings-summary-label">Clinic</span>
+              <span className="admin-settings-summary-value">
+                {formData.clinic_name || 'Not set'}
+              </span>
+            </div>
+            <div className="admin-settings-summary-item">
+              <span className="admin-settings-summary-label">Default Status</span>
+              <span className="admin-settings-status-pill">
+                {formData.default_case_status}
+              </span>
+            </div>
+            <div className="admin-settings-summary-item">
+              <span className="admin-settings-summary-label">Inactivity Flag</span>
+              <span className="admin-settings-summary-value">
+                {formData.inactivity_threshold_days || 0} days
+              </span>
+            </div>
+            <div className="admin-settings-summary-item">
+              <span className="admin-settings-summary-label">Registration</span>
+              <span
+                className={`admin-settings-registration-pill${
+                  formData.allow_registration ? ' is-enabled' : ''
+                }`}
+              >
+                {formData.allow_registration ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
+          </div>
+        </aside>
+      </form>
     </div>
   );
 }
