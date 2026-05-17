@@ -9,6 +9,11 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { api } from '../api/apiClient';
+import {
+  CASE_STATUS_STEPS,
+  getCaseStatusMeta,
+  normalizeCaseStatus,
+} from '../utils/caseStatus';
 
 export default function AdminSettings() {
   const [formData, setFormData] = useState({
@@ -31,7 +36,7 @@ export default function AdminSettings() {
           clinic_name: data.clinic_name || '',
           allow_registration:
             data.allow_registration !== undefined ? data.allow_registration : true,
-          default_case_status: data.default_case_status || 'open',
+          default_case_status: normalizeCaseStatus(data.default_case_status),
           inactivity_threshold_days: data.inactivity_threshold_days || 14,
         });
       } catch (error) {
@@ -141,8 +146,11 @@ export default function AdminSettings() {
                   }
                   className="admin-settings-select"
                 >
-                  <option value="open">Open</option>
-                  <option value="closed">Closed</option>
+                  {CASE_STATUS_STEPS.map((status) => (
+                    <option key={status.value} value={status.value}>
+                      {status.label}
+                    </option>
+                  ))}
                 </select>
               </span>
             </label>
@@ -242,7 +250,7 @@ export default function AdminSettings() {
             <div className="admin-settings-summary-item">
               <span className="admin-settings-summary-label">Default Status</span>
               <span className="admin-settings-status-pill">
-                {formData.default_case_status}
+                {getCaseStatusMeta(formData.default_case_status).label}
               </span>
             </div>
             <div className="admin-settings-summary-item">

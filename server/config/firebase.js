@@ -18,7 +18,7 @@ function getFirebaseCredential() {
     process.env.FIREBASE_CLIENT_EMAIL &&
     process.env.FIREBASE_PRIVATE_KEY;
 
-  // Vercel / production: use environment variables
+  
   if (hasFirebaseEnv) {
     return admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
@@ -27,7 +27,7 @@ function getFirebaseCredential() {
     });
   }
 
-  // Local development: use serviceAccountKey.json one folder above this file
+  
   const serviceAccountPath = path.join(__dirname, '..', 'serviceAccountKey.json');
 
   if (!fs.existsSync(serviceAccountPath)) {
@@ -46,7 +46,7 @@ function getFirebaseAppOptions() {
     credential: getFirebaseCredential(),
   };
 
-  // Only add Storage bucket if you are actually using Firebase Storage
+  
   if (process.env.FIREBASE_STORAGE_BUCKET) {
     options.storageBucket = process.env.FIREBASE_STORAGE_BUCKET;
   }

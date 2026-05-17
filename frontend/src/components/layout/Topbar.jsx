@@ -1,4 +1,3 @@
-import { Bell, ChevronDown, Search } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
@@ -11,7 +10,7 @@ const getInitials = (value) => {
   const safeValue = (value || '').trim();
 
   if (!safeValue) {
-    return 'ST';
+    return 'US';
   }
 
   const parts = safeValue.split(/\s+/).filter(Boolean);
@@ -32,17 +31,28 @@ export const Topbar = ({ collapsed, setCollapsed }) => {
 
   let breadcrumb = 'Home';
   if (pathName.includes('cases')) breadcrumb = 'Home > Cases';
+  else if (pathName.includes('groups')) breadcrumb = 'Home > Student Groups';
   else if (pathName.includes('calendar')) breadcrumb = 'Home > Calendar';
-  else if (pathName.includes('documents')) breadcrumb = 'Home > Documents';
   else if (pathName.includes('ai')) breadcrumb = 'Home > AI Assistant';
 
-  if (isStudentPortalView) {
-    const displayName =
-      currentUser?.displayName ||
-      currentUser?.name ||
-      currentUser?.email ||
-      'Student';
+  const displayName =
+    currentUser?.name ||
+    currentUser?.displayName ||
+    currentUser?.email ||
+    (isStudentPortalView ? 'Student' : 'User');
+  const roleLabel = roleLabelMap[userRole] || 'User';
 
+  const userSummary = (
+    <div className="topbar-user">
+      <div className="student-topbar-avatar">{getInitials(displayName)}</div>
+      <div className="topbar-user-copy">
+        <span className="topbar-user-name">{displayName}</span>
+        <span className="topbar-user-role">{roleLabel}</span>
+      </div>
+    </div>
+  );
+
+  if (isStudentPortalView) {
     return (
       <header className="topbar student-dashboard-topbar">
         <div className="student-topbar-left">
@@ -57,27 +67,9 @@ export const Topbar = ({ collapsed, setCollapsed }) => {
               <span />
             </span>
           </button>
-
-          <label className="student-topbar-search" aria-label="Search">
-            <Search size={20} className="student-topbar-search-icon" />
-            <input
-              type="text"
-              placeholder="Search cases, clients..."
-              className="student-topbar-search-input"
-            />
-          </label>
         </div>
 
-        <div className="student-topbar-right">
-          <button type="button" className="student-role-button">
-            <span>{roleLabelMap[userRole] || 'Student'}</span>
-            <ChevronDown size={18} />
-          </button>
-
-          <div className="student-topbar-avatar">
-            {getInitials(displayName)}
-          </div>
-        </div>
+        <div className="student-topbar-right">{userSummary}</div>
       </header>
     );
   }
@@ -88,17 +80,7 @@ export const Topbar = ({ collapsed, setCollapsed }) => {
         <span>{breadcrumb}</span>
       </div>
 
-      <div className="topbar-actions">
-        <label className="topbar-search">
-          <Search className="topbar-search-icon" size={16} />
-          <input
-            type="text"
-            placeholder="Search users, cases, docs..."
-            className="input-field topbar-search-input-generic"
-          />
-        </label>
-
-      </div>
+      {userSummary}
     </header>
   );
 };

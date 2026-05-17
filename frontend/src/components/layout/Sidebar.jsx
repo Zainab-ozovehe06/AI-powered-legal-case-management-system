@@ -1,125 +1,54 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
-  BarChart3,
+  LayoutDashboard,
+  FolderOpen,
   CalendarDays,
+  FileText,
+  MessageSquare,
   ChevronLeft,
   ChevronRight,
-  FileText,
-  FolderOpen,
-  LayoutDashboard,
-  MessageSquare,
-  Scale,
-  Settings,
   Users,
+  Settings,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-const roleLabelMap = {
-  admin: 'Admin',
-  law_student: 'Student',
-};
-
-const isStudentPortalItemActive = (item, pathname) => {
-  if (item.path === '/') {
-    return pathname === '/' || pathname === '/student';
-  }
-
-  if (item.path === '/cases') {
-    return pathname === '/cases' || /^\/cases\/[^/]+$/.test(pathname);
-  }
-
-  return pathname === item.path;
-};
-
 export const Sidebar = ({ collapsed, setCollapsed }) => {
   const { currentUser, userRole, logout } = useAuth();
-  const location = useLocation();
 
-  const isStudentPortalView = userRole === 'law_student';
-
-  const studentNavItems = [
-    { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
-    { name: 'New Case', path: '/cases/new', icon: <FileText size={20} /> },
-    { name: 'Cases', path: '/cases', icon: <FolderOpen size={20} /> },
-    { name: 'Calendar', path: '/calendar', icon: <CalendarDays size={20} /> },
-    { name: 'AI Assistant', path: '/ai', icon: <MessageSquare size={20} /> },
-  ];
-
+  
+    const studentNavItems = [
+  { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
+  { name: 'New Case', path: '/cases/new', icon: <FileText size={20} /> },
+  { name: 'Case Management', path: '/cases', icon: <FolderOpen size={20} /> },
+  { name: 'Calendar', path: '/calendar', icon: <CalendarDays size={20} /> },
+  { name: 'Clinic AI', path: '/assistant', icon: <MessageSquare size={20} /> },
+];
+   
   const adminNavItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
     { name: 'Manage Users', path: '/admin/users', icon: <Users size={20} /> },
+    { name: 'Student Groups', path: '/admin/groups', icon: <Users size={20} /> },
     { name: 'All Cases', path: '/admin/cases', icon: <FolderOpen size={20} /> },
+    { name: 'Calendar', path: '/calendar', icon: <CalendarDays size={20} /> },
+    { name: 'Clinic AI', path: '/assistant', icon: <MessageSquare size={20} /> },
     { name: 'Settings', path: '/admin/settings', icon: <Settings size={20} /> },
   ];
 
   const navItems = userRole === 'admin' ? adminNavItems : studentNavItems;
-  const displayName =
-    currentUser?.displayName ||
-    currentUser?.name ||
-    currentUser?.email ||
-    'User';
-
-  if (isStudentPortalView) {
-    return (
-      <aside className={`sidebar student-dashboard-sidebar${collapsed ? ' collapsed' : ''}`}>
-        <div className="student-sidebar-brand">
-          <div className="student-sidebar-brand-mark">
-            <Scale size={24} />
-          </div>
-
-          <div className="student-sidebar-brand-copy">
-            <span className="student-sidebar-brand-title">Nile Law Clinic</span>
-            <span className="student-sidebar-brand-subtitle">ILCMS</span>
-          </div>
-        </div>
-
-        <div className="student-sidebar-section">
-          <span className="student-sidebar-label">STUDENT PORTAL</span>
-        </div>
-
-        <nav className="student-sidebar-nav">
-          {studentNavItems.map((item) => (
-            <NavLink
-              key={item.name}
-              to={item.path}
-              className={() =>
-                `student-sidebar-item${
-                  isStudentPortalItemActive(item, location.pathname) ? ' active' : ''
-                }`
-              }
-              title={collapsed ? item.name : ''}
-            >
-              <span className="student-sidebar-item-icon">{item.icon}</span>
-              <span className="student-sidebar-item-text">{item.name}</span>
-            </NavLink>
-          ))}
-        </nav>
-
-        <div className="student-sidebar-footer">
-          <div className="student-sidebar-user">
-            <span className="student-sidebar-user-name">{displayName}</span>
-            <span className="student-sidebar-user-role">
-              {roleLabelMap[userRole] || 'Student'}
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={logout}
-            className="student-sidebar-signout"
-          >
-            Sign Out
-          </button>
-        </div>
-      </aside>
-    );
-  }
+  const sidebarClassName = `sidebar${
+    userRole === 'law_student' ? ' student-initial-sidebar' : ''
+  }${collapsed ? ' collapsed' : ''}`;
 
   return (
-    <aside className={`sidebar admin-sidebar ${collapsed ? 'collapsed' : ''}`}>
+    <aside className={sidebarClassName}>
       <div className="logo-area">
-        <div className="sidebar-brand-mark">LC</div>
-        <span className="sidebar-text">Law Clinic AI</span>
+        <div
+          className="flex items-center justify-center w-8 h-8 rounded-md bg-blue-600 text-white font-bold flex-shrink-0"
+          style={{ fontSize: '0.8rem' }}
+        >
+        
+        </div>
+        <span className="sidebar-text">Law Clinic</span>
       </div>
 
       <nav className="nav-menu">
@@ -136,11 +65,10 @@ export const Sidebar = ({ collapsed, setCollapsed }) => {
         ))}
       </nav>
 
-      <div className="sidebar-footer">
+      <div className="mt-auto">
         <button
-          type="button"
           onClick={() => setCollapsed(!collapsed)}
-          className="sidebar-collapse-button"
+          className="btn btn-ghost w-full flex justify-center py-3 mb-2"
           title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
         >
           {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
@@ -148,23 +76,27 @@ export const Sidebar = ({ collapsed, setCollapsed }) => {
 
         <div className="user-widget">
           <div className="avatar">
-            {displayName.charAt(0).toUpperCase() || 'U'}
+            {currentUser?.displayName?.charAt(0) || 'U'}
           </div>
-          <div className="sidebar-user-copy sidebar-text">
-            <span className="sidebar-user-name">{displayName}</span>
-            <span className="badge badge-primary sidebar-user-role">
-              {roleLabelMap[userRole] || 'Student'}
+          <div className="sidebar-text flex-col flex gap-1 overflow-hidden">
+            <span className="font-semibold text-sm truncate">
+              {currentUser?.displayName || 'User'}
+            </span>
+            <span
+              className="badge badge-primary truncate w-max"
+              style={{ fontSize: '0.65rem' }}
+            >
+              {userRole || 'Student'}
             </span>
           </div>
         </div>
 
-        <div className="sidebar-footer-actions sidebar-text">
+        <div className="px-4 pb-4 sidebar-text">
           <button
-            type="button"
             onClick={logout}
-            className="sidebar-logout-button"
+            className="text-xs text-slate-500 hover:text-slate-800 transition-colors"
           >
-            Sign Out
+            Sign_Out
           </button>
         </div>
       </div>

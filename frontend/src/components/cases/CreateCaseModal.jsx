@@ -24,23 +24,23 @@ export function CreateCaseModal({ isOpen, onClose, onCreate, isCreating }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+      className="casemode"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 relative"
+        className="caseemode"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-500 hover:text-slate-700"
+          className="casemodebtn"
         >
           <X size={20} />
         </button>
 
-        <h2 className="text-xl font-bold text-slate-800 mb-1">Create New Case</h2>
-        <p className="text-sm text-slate-500 mb-6">Fill in the case details below.</p>
+        <h2 className="display">Create New Case</h2>
+        <p className="details">Fill in the case details below.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -51,19 +51,19 @@ export function CreateCaseModal({ isOpen, onClose, onCreate, isCreating }) {
               onChange={(e) =>
                 setFormData({ ...formData, client_name: e.target.value })
               }
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              className="req"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Case Type</label>
+            <label className="blocktext">Case Type</label>
             <select
               value={formData.case_type}
               onChange={(e) =>
                 setFormData({ ...formData, case_type: e.target.value })
               }
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              className="modalborder"
               required
             >
               <option value="criminal">Criminal</option>
@@ -74,31 +74,31 @@ export function CreateCaseModal({ isOpen, onClose, onCreate, isCreating }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Offence / Matter</label>
+            <label className="blkoffence ">Offence</label>
             <input
               type="text"
               value={formData.offence}
               onChange={(e) =>
                 setFormData({ ...formData, offence: e.target.value })
               }
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              className="blkreq"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+            <label className="blkdesc">Description</label>
             <textarea
               value={formData.description}
               onChange={(e) =>
                 setFormData({ ...formData, description: e.target.value })
               }
               rows={4}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              className="blkrow"
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flexjustify">
             <button type="button" onClick={onClose} className="btn btn-secondary">
               Cancel
             </button>

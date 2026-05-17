@@ -19,7 +19,8 @@ export default function NewCase() {
     offence: '',
     description: '',
   });
-
+  
+//loading state for when the case is being created to prevent multiple submissions and show feedback
   const [isCreating, setIsCreating] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -32,7 +33,20 @@ export default function NewCase() {
       alert(result.message || 'Case created successfully');
 
       if (result.caseId) {
-        navigate(`/cases/${result.caseId}`);
+        let routeCaseId = result.caseId;
+
+        try {
+          const visibleCases = await api.getVisibleCases();
+          const createdCase = visibleCases.find(
+            (caseItem) => caseItem.id === result.caseId
+          );
+
+          routeCaseId = createdCase?.caseDisplayId || routeCaseId;
+        } catch (resolveError) {
+          console.error('Failed to resolve display case ID:', resolveError);
+        }
+
+        navigate(`/cases/${routeCaseId}`);
       } else {
         navigate('/cases');
       }
@@ -78,7 +92,7 @@ export default function NewCase() {
                 setFormData({ ...formData, client_name: e.target.value })
               }
               className="new-case-input"
-              placeholder="e.g. John Mukasa"
+              placeholder="e.g. Sumaya Ahmed"
               required
             />
           </label>

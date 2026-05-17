@@ -10,11 +10,12 @@ import CalendarView from './pages/CalendarView';
 import { useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
-import TestAuth from './pages/TestAuth';
 import ManageUsers from './pages/Manageusers';
 import AdminSettings from './pages/AdminSettings';
 import StudentCases from './pages/StudentCases';
 import NewCase from './pages/NewCase';
+import GroupManagement from './pages/GroupManagement';
+import LegalAssistant from './pages/LegalAssistant';
 
 const DashboardRouter = () => {
   const { currentUser, userRole } = useAuth();
@@ -32,7 +33,6 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/test-auth" element={<TestAuth />} />
 
         <Route
           path="/"
@@ -44,16 +44,15 @@ function App() {
         >
           <Route index element={<DashboardRouter />} />
 
+          <Route path="calendar" element={<CalendarView />} />
           <Route
-            path="cases/:caseId"
+            path="assistant"
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'law_student']}>
-                <CaseDetail />
+              <RoleProtectedRoute allowedRoles={['admin', 'law_student', 'supervisor', 'lawyer']}>
+                <LegalAssistant />
               </RoleProtectedRoute>
             }
           />
-
-          <Route path="calendar" element={<CalendarView />} />
 
           <Route
             path="admin"
@@ -90,38 +89,51 @@ function App() {
               </RoleProtectedRoute>
             }
           />
-        
-<Route
-  path="admin/settings"
-  element={
-    <RoleProtectedRoute allowedRoles={['admin']}>
-      <AdminSettings />
-    </RoleProtectedRoute>
-  }
-/><Route
-  path="cases"
-  element={
-    <RoleProtectedRoute allowedRoles={['law_student']}>
-      <StudentCases />
-    </RoleProtectedRoute>
-  }
-/>
 
-<Route
-  path="cases/new"
-  element={
-    <RoleProtectedRoute allowedRoles={['law_student']}>
-      <NewCase />
-    </RoleProtectedRoute>
-  }
-/><Route
-  path="cases/:caseId"
-  element={
-    <RoleProtectedRoute allowedRoles={['admin', 'law_student']}>
-      <CaseDetail />
-    </RoleProtectedRoute>
-  }
-/>
+          <Route
+            path="admin/groups"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin']}>
+                <GroupManagement />
+              </RoleProtectedRoute>
+            }
+          />
+
+          <Route
+            path="admin/settings"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin']}>
+                <AdminSettings />
+              </RoleProtectedRoute>
+            }
+          />
+
+          <Route
+            path="cases"
+            element={
+              <RoleProtectedRoute allowedRoles={['law_student']}>
+                <StudentCases />
+              </RoleProtectedRoute>
+            }
+          />
+
+          <Route
+            path="cases/new"
+            element={
+              <RoleProtectedRoute allowedRoles={['law_student']}>
+                <NewCase />
+              </RoleProtectedRoute>
+            }
+          />
+
+          <Route
+            path="cases/:caseId"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'law_student']}>
+                <CaseDetail />
+              </RoleProtectedRoute>
+            }
+          />
         </Route>
       </Routes>
     </BrowserRouter>

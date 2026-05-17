@@ -38,6 +38,7 @@ export const AuthProvider = ({ children }) => {
         setCurrentUser({
           uid: user.uid,
           email: user.email,
+          displayName: userData.displayName || user.displayName || null,
           ...userData,
         });
 
