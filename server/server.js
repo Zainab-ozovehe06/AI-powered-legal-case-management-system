@@ -44,30 +44,23 @@ app.use(cors({
 
 app.use(express.json());
 
-/*
-  Root route.
-  This fixes the "Cannot GET /" message when you open
-  your backend Vercel link directly in the browser.
-*/
 app.get('/', (req, res) => {
-  res.json({
+  res.status(200).json({
     status: 'ok',
-    message: 'Legal Case Management backend is running'
+    message: 'Legal Case Management backend root route is working',
+    version: 'root-route-v1'
   });
 });
 
-/*
-  Health check route.
-  Use this to test if your backend API is alive.
-*/
 app.get('/api/health', (req, res) => {
-  res.json({
+  res.status(200).json({
     status: 'ok',
-    message: 'Legal Case Management API is running'
+    message: 'Legal Case Management API is running',
+    version: 'health-route-v1'
   });
 });
 
-// API routes
+
 app.use('/api/auth', authRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/ai', aiRoutes);
