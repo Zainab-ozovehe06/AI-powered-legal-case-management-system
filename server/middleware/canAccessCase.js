@@ -1,10 +1,15 @@
 import { db } from '../config/firebase.js';
+import {
+  canStudentAccessCase,
+  getActorId,
+  isCaseDeleted,
+} from '../utils/groupCollaboration.js';
 
 const canAccessCase = async (req, res, next) => {
   try {
     const { caseId } = req.params;
     const currentUser = req.currentUser;
-    const actorId = currentUser?.uid || currentUser?.user_id;
+    const actorId = getActorId(req);
 
     if (!currentUser || !actorId) {
       return res.status(401).json({ error: 'Unauthenticated' });
@@ -19,14 +24,15 @@ const canAccessCase = async (req, res, next) => {
     }
 
     if (currentUser.role === 'law_student') {
-      const assignmentSnap = await db
-        .collection('case_assignments')
-        .where('case_id', '==', caseId)
-        .where('user_id', '==', actorId)
-        .limit(1)
-        .get();
+      const caseDoc = await db.collection('cases').doc(caseId).get();
 
-      if (assignmentSnap.empty) {
+      if (!caseDoc.exists || isCaseDeleted(caseDoc.data())) {
+        return res.status(404).json({ error: 'Case not found' });
+      }
+
+      const hasAccess = await canStudentAccessCase(actorId, caseId, caseDoc.data());
+
+      if (!hasAccess) {
         return res.status(403).json({ error: 'You are not assigned to this case' });
       }
 

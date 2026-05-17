@@ -40,6 +40,17 @@ const resolveUploadPath = (relativePath) => {
   return absolutePath;
 };
 
+const deleteStoredFile = async (documentRecord) => {
+  if (!documentRecord?.server_file_path) return;
+
+  const absolutePath = resolveUploadPath(documentRecord.server_file_path);
+  await fs.unlink(absolutePath).catch((error) => {
+    if (error.code !== 'ENOENT') {
+      throw error;
+    }
+  });
+};
+
 const loadDocument = async (req, res, next) => {
   try {
     const documentRef = db.collection('documents').doc(req.params.documentId);
@@ -164,6 +175,73 @@ router.get('/:documentId/download', requireAuth, loadDocument, canAccessCase, as
 
     return res.status(500).json({
       error: error.message || 'Failed to serve document',
+    });
+  }
+});
+
+router.patch('/:documentId', requireAuth, loadDocument, canAccessCase, async (req, res) => {
+  try {
+    const actorId = req.currentUser?.uid || req.currentUser?.user_id;
+    const nextName = path.basename(req.body?.name?.toString().trim() || '');
+
+    if (!actorId) {
+      return res.status(401).json({ error: 'Authenticated user ID missing' });
+    }
+
+    if (!nextName) {
+      return res.status(400).json({ error: 'Document name is required' });
+    }
+
+    await req.documentRecord.ref.update({
+      name: nextName,
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_by_user_id: actorId,
+    });
+
+    return res.status(200).json({
+      message: 'Document updated successfully',
+      document: {
+        id: req.documentRecord.id,
+        name: nextName,
+      },
+    });
+  } catch (error) {
+    console.error('Error updating document:', error);
+    return res.status(500).json({
+      error: error.message || 'Failed to update document',
+    });
+  }
+});
+
+router.delete('/:documentId', requireAuth, loadDocument, canAccessCase, async (req, res) => {
+  try {
+    const actorId = req.currentUser?.uid || req.currentUser?.user_id;
+    const documentName = req.documentRecord.name || 'document';
+
+    if (!actorId) {
+      return res.status(401).json({ error: 'Authenticated user ID missing' });
+    }
+
+    await deleteStoredFile(req.documentRecord);
+    await req.documentRecord.ref.delete();
+
+    await db.collection('activities').add({
+      case_id: req.documentRecord.case_id,
+      court_name: null,
+      description: `Deleted document: ${documentName}`,
+      logged_by_user_id: actorId,
+      logged_at: admin.firestore.FieldValue.serverTimestamp(),
+      type: 'document_delete',
+    });
+
+    return res.status(200).json({
+      message: 'Document deleted successfully',
+      documentId: req.documentRecord.id,
+    });
+  } catch (error) {
+    console.error('Error deleting document:', error);
+    return res.status(500).json({
+      error: error.message || 'Failed to delete document',
     });
   }
 });

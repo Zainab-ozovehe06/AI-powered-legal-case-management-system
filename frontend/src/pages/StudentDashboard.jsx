@@ -9,6 +9,9 @@ import {
 } from 'lucide-react';
 import { api } from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
+import UpcomingEvents from '../components/calendar/UpcomingEvents';
+import { getTodayDateString } from '../components/calendar/eventUtils';
+import { getCaseStatusMeta, normalizeCaseStatus } from '../utils/caseStatus';
 
 const formatLabel = (value, fallback) => {
   const safeValue = (value || fallback || '').toString().trim();
@@ -25,30 +28,17 @@ const formatLabel = (value, fallback) => {
     .join(' ');
 };
 
-const formatDate = (value) => {
-  const date = value?.toDate?.();
-
-  if (!date) {
-    return 'No date available';
-  }
-
-  return new Intl.DateTimeFormat('en-CA', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
-};
-
 export default function StudentDashboard() {
   const { currentUser } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [cases, setCases] = useState([]);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [stats, setStats] = useState({
     activeCases: 0,
     upcomingHearings: 0,
     pendingActions: 0,
-    urgent: 0,
+    inCourt: 0,
   });
 
   useEffect(() => {
@@ -56,7 +46,10 @@ export default function StudentDashboard() {
       try {
         setLoading(true);
 
-        const visibleCases = await api.getVisibleCases();
+        const [visibleCases, visibleEvents] = await Promise.all([
+          api.getVisibleCases(),
+          api.getEvents({ status: 'upcoming', date_from: getTodayDateString() }),
+        ]);
 
         const sortedCases = [...visibleCases].sort((a, b) => {
           const dateA = a.date_opened?.seconds || 0;
@@ -65,20 +58,28 @@ export default function StudentDashboard() {
         });
 
         const activeCases = visibleCases.filter(
-          (c) => (c.status || 'open').toLowerCase() !== 'closed'
+          (c) => normalizeCaseStatus(c.status) !== 'closed'
         ).length;
 
-        const urgentCases = visibleCases.filter((c) => {
-          const status = (c.status || '').toLowerCase();
-          return status === 'urgent';
-        }).length;
+        const pendingCases = visibleCases.filter(
+          (c) => normalizeCaseStatus(c.status) === 'pending'
+        ).length;
+
+        const inCourtCases = visibleCases.filter(
+          (c) => normalizeCaseStatus(c.status) === 'incourt'
+        ).length;
+
+        const upcomingHearings = visibleEvents.filter(
+          (event) => event.event_type === 'court_date'
+        ).length;
 
         setCases(sortedCases);
+        setUpcomingEvents(visibleEvents);
         setStats({
           activeCases,
-          upcomingHearings: 0,
-          pendingActions: activeCases,
-          urgent: urgentCases,
+          upcomingHearings,
+          pendingActions: pendingCases,
+          inCourt: inCourtCases,
         });
       } catch (error) {
         console.error('Error loading student dashboard:', error);
@@ -110,8 +111,8 @@ export default function StudentDashboard() {
       iconClassName: 'student-stat-icon-muted',
     },
     {
-      label: 'Urgent',
-      value: stats.urgent,
+      label: 'In Court',
+      value: stats.inCourt,
       icon: AlertTriangle,
       iconClassName: 'student-stat-icon-alert',
     },
@@ -120,25 +121,11 @@ export default function StudentDashboard() {
   const recentCases = cases.slice(0, 4);
 
   const getCaseBadge = (status) => {
-    const normalized = (status || 'open').toLowerCase();
-
-    if (normalized === 'closed') {
-      return {
-        className: 'student-status-success',
-        label: formatLabel(status, 'Closed'),
-      };
-    }
-
-    if (normalized === 'urgent') {
-      return {
-        className: 'student-status-danger',
-        label: formatLabel(status, 'Urgent'),
-      };
-    }
+    const statusMeta = getCaseStatusMeta(status);
 
     return {
-      className: 'student-status-warning',
-      label: formatLabel(status, 'Open'),
+      className: `student-status-${statusMeta.value}`,
+      label: statusMeta.label,
     };
   };
 
@@ -161,7 +148,7 @@ export default function StudentDashboard() {
         <div className="student-dashboard-panel student-dashboard-loading">
           <div className="student-dashboard-loading-copy">
             <Loader2 className="student-loader-icon" size={20} />
-            <span>Loading dashboard...</span>
+            <span>Loading your dashboard...</span>
           </div>
         </div>
       ) : (
@@ -201,11 +188,13 @@ export default function StudentDashboard() {
                 ) : (
                   recentCases.map((caseItem) => {
                     const badge = getCaseBadge(caseItem.status);
+                    const displayCaseId = caseItem.caseDisplayId || '---';
+                    const routeCaseId = caseItem.caseDisplayId || caseItem.id;
 
                     return (
                       <Link
                         key={caseItem.id}
-                        to={`/cases/${caseItem.id}`}
+                        to={`/cases/${routeCaseId}`}
                         className="student-case-card"
                       >
                         <div className="student-case-copy">
@@ -213,7 +202,7 @@ export default function StudentDashboard() {
                             {caseItem.client_name || 'Untitled Client'}
                           </p>
                           <p className="student-case-meta">
-                            {caseItem.id} {'\u00B7'}{' '}
+                            Case {displayCaseId} {'\u00B7'}{' '}
                             {formatLabel(caseItem.case_type, 'Case')}
                           </p>
                         </div>
@@ -228,44 +217,15 @@ export default function StudentDashboard() {
               </div>
             </section>
 
-            <section className="student-dashboard-panel">
-              <div className="student-panel-header">
-                <h2 className="student-panel-title">Recent Activity</h2>
-              </div>
-
-              <div className="student-activity-list">
-                {recentCases.length === 0 ? (
-                  <div className="student-empty-state">
-                    <p className="student-empty-title">No recent activity yet</p>
-                    <p className="student-empty-copy">
-                      Activity will appear here as you work on cases.
-                    </p>
-                  </div>
-                ) : (
-                  recentCases.map((caseItem) => (
-                    <div key={caseItem.id} className="student-activity-item">
-                      <div className="student-activity-dot" />
-                      <div className="student-activity-copy">
-                        <p className="student-activity-text">
-                          Case for{' '}
-                          <span className="student-activity-emphasis">
-                            {caseItem.client_name || 'Untitled Client'}
-                          </span>{' '}
-                          is currently marked as{' '}
-                          <span className="student-activity-emphasis">
-                            {formatLabel(caseItem.status, 'Open')}
-                          </span>
-                          .
-                        </p>
-                        <p className="student-activity-date">
-                          {formatDate(caseItem.date_opened)}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
+            <UpcomingEvents
+              events={upcomingEvents}
+              loading={loading}
+              dueSoonOnly
+              title="Due Soon"
+              subtitle="Upcoming case events within the next 7 days."
+              emptyTitle="No events due soon"
+              emptyCopy="Events scheduled for the next week will appear here."
+            />
           </div>
         </>
       )}

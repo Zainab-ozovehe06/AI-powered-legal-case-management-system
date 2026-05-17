@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, Loader2, Search } from 'lucide-react';
+import { ArrowUpRight, Check, Loader2, Search } from 'lucide-react';
 import { api } from '../api/apiClient';
+import {
+  CASE_STATUS_STEPS,
+  getCaseStatusMeta,
+  getCaseStatusStepIndex,
+} from '../utils/caseStatus';
 
 const formatLabel = (value, fallback) => {
   const safeValue = (value || fallback || '').toString().trim();
@@ -54,44 +59,6 @@ const getCaseTypeClass = (caseType) => {
   return 'student-case-type-default';
 };
 
-const getStatusClass = (status) => {
-  const normalized = (status || 'open').toLowerCase();
-
-  if (normalized === 'closed') {
-    return 'student-case-status-closed';
-  }
-
-  if (normalized === 'urgent') {
-    return 'student-case-status-urgent';
-  }
-
-  return 'student-case-status-open';
-};
-
-const getLifecycleStepIndex = (status) => {
-  const normalized = (status || 'open').toLowerCase();
-
-  if (normalized === 'closed') {
-    return 4;
-  }
-
-  if (
-    normalized.includes('court') ||
-    normalized.includes('hearing') ||
-    normalized.includes('trial')
-  ) {
-    return 3;
-  }
-
-  if (normalized.includes('intake') || normalized.includes('new')) {
-    return 1;
-  }
-
-  return 2;
-};
-
-const lifecycleLabels = ['Intake', 'Active Review', 'Current Status', 'Outcome'];
-
 export default function StudentCases() {
   const navigate = useNavigate();
 
@@ -129,11 +96,16 @@ export default function StudentCases() {
     if (!term) return cases;
 
     return cases.filter((caseItem) => {
+      const statusMeta = getCaseStatusMeta(caseItem.status);
+
       return (
         (caseItem.client_name || '').toLowerCase().includes(term) ||
         (caseItem.case_type || '').toLowerCase().includes(term) ||
         (caseItem.offence || '').toLowerCase().includes(term) ||
-        (caseItem.status || '').toLowerCase().includes(term)
+        (caseItem.caseDisplayId || '').toLowerCase().includes(term) ||
+        (caseItem.status || '').toLowerCase().includes(term) ||
+        statusMeta.label.toLowerCase().includes(term) ||
+        statusMeta.displayLabel.toLowerCase().includes(term)
       );
     });
   }, [cases, searchTerm]);
@@ -184,13 +156,16 @@ export default function StudentCases() {
       ) : (
         <div className="student-cases-list">
           {filteredCases.map((caseItem) => {
-            const lifecycleIndex = getLifecycleStepIndex(caseItem.status);
+            const statusMeta = getCaseStatusMeta(caseItem.status);
+            const lifecycleIndex = getCaseStatusStepIndex(caseItem.status);
+            const displayCaseId = caseItem.caseDisplayId || '---';
+            const routeCaseId = caseItem.caseDisplayId || caseItem.id;
 
             return (
               <button
                 key={caseItem.id}
                 type="button"
-                onClick={() => navigate(`/cases/${caseItem.id}`)}
+                onClick={() => navigate(`/cases/${routeCaseId}`)}
                 className="student-cases-card"
               >
                 <div className="student-cases-card-header">
@@ -199,7 +174,7 @@ export default function StudentCases() {
                       {caseItem.client_name || 'Untitled Client'}
                     </h2>
                     <p className="student-cases-card-meta">
-                      {caseItem.id} {'\u00B7'} {caseItem.offence || 'General matter'}
+                      Case {displayCaseId} {'\u00B7'} {caseItem.offence || 'General matter'}
                     </p>
                   </div>
 
@@ -212,11 +187,9 @@ export default function StudentCases() {
                       {formatLabel(caseItem.case_type, 'Case')}
                     </span>
                     <span
-                      className={`student-case-status-tag ${getStatusClass(
-                        caseItem.status
-                      )}`}
+                      className={`student-case-status-tag student-case-status-${statusMeta.value}`}
                     >
-                      {formatLabel(caseItem.status, 'Open')}
+                      {statusMeta.label}
                     </span>
                   </div>
                 </div>
@@ -238,26 +211,26 @@ export default function StudentCases() {
 
                   <div className="student-cases-detail">
                     <span className="student-cases-detail-label">Case ID</span>
-                    <p className="student-cases-detail-value">{caseItem.id}</p>
+                    <p className="student-cases-detail-value">{displayCaseId}</p>
                   </div>
 
                   <div className="student-cases-detail">
                     <span className="student-cases-detail-label">Current Status</span>
                     <p className="student-cases-detail-value">
-                      {formatLabel(caseItem.status, 'Open')}
+                      {statusMeta.displayLabel}
                     </p>
                   </div>
                 </div>
 
                 <div className="student-cases-lifecycle">
-                  {lifecycleLabels.map((label, index) => {
+                  {CASE_STATUS_STEPS.map((stage, index) => {
                     const stepNumber = index + 1;
                     const isComplete = stepNumber < lifecycleIndex;
                     const isCurrent = stepNumber === lifecycleIndex;
 
                     return (
                       <div
-                        key={`${caseItem.id}-${label}`}
+                        key={`${caseItem.id}-${stage.value}`}
                         className="student-cases-step"
                       >
                         <div className="student-cases-step-track">
@@ -266,10 +239,10 @@ export default function StudentCases() {
                               isComplete ? ' is-complete' : ''
                             }${isCurrent ? ' is-current' : ''}`}
                           >
-                            {stepNumber}
+                            {isComplete ? <Check size={16} /> : stepNumber}
                           </span>
 
-                          {stepNumber !== lifecycleLabels.length ? (
+                          {stepNumber !== CASE_STATUS_STEPS.length ? (
                             <span
                               className={`student-cases-step-line${
                                 stepNumber < lifecycleIndex ? ' is-complete' : ''
@@ -284,13 +257,8 @@ export default function StudentCases() {
                               isCurrent ? ' is-current' : ''
                             }`}
                           >
-                            {label}
+                            {stage.label}
                           </span>
-                          {isCurrent && stepNumber === 3 ? (
-                            <span className="student-cases-step-caption">
-                              {formatLabel(caseItem.status, 'Open')}
-                            </span>
-                          ) : null}
                         </div>
                       </div>
                     );

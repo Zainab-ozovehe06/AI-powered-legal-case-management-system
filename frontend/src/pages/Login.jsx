@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { Loader2, LogIn, Scale } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { Scale, LogIn } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -18,7 +18,7 @@ export default function Login() {
     setIsSubmitting(true);
 
     try {
-      await login(email, password);
+      await login(email.trim(), password);
       navigate('/');
     } catch (err) {
       console.error('Login error:', err);
@@ -29,72 +29,64 @@ export default function Login() {
   };
 
   return (
-    <div
-      className="flex items-center justify-center min-h-screen app-container w-full"
-      style={{ position: 'absolute', top: 0, left: 0, zIndex: 100 }}
-    >
-      <div
-        className="glass-panel p-8 w-full max-w-md animate-fade-in relative z-10 mx-4"
-        style={{ backgroundColor: 'rgba(255,255,255,0.95)' }}
-      >
-        <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 text-white mb-4 shadow-lg shadow-blue-200">
-            <Scale size={32} />
+    <div className="auth-page">
+      <section className="auth-card animate-fade-in">
+        <div className="auth-brand">
+          <div className="auth-brand-mark">
+            <Scale size={30} />
           </div>
-          <h1 className="text-2xl font-bold text-center">NILE LAW CLINIC</h1>
-          <p className="text-muted text-center mt-2">Sign in to manage your cases</p>
+          <div className="auth-brand-copy">
+            <h1 className="auth-title">Law Clinic</h1>
+            <p className="auth-subtitle">Sign in to your clinic workspace.</p>
+          </div>
         </div>
 
-        <form onSubmit={handleLogin} className="flex flex-col gap-4">
-          <div className="input-group">
-            <label className="input-label">Email</label>
+        <form onSubmit={handleLogin} className="auth-form">
+          <label className="auth-field">
+            <span className="auth-label">Email</span>
             <input
               type="email"
-              className="w-full p-3 rounded-xl border border-slate-300"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
+              placeholder="Enter email address"
+              autoComplete="email"
+              className="auth-input"
               required
             />
-          </div>
+          </label>
 
-          <div className="input-group">
-            <label className="input-label">Password</label>
+          <label className="auth-field">
+            <span className="auth-label">Password</span>
             <input
               type="password"
-              className="w-full p-3 rounded-xl border border-slate-300"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
+              autoComplete="current-password"
+              className="auth-input"
               required
             />
-          </div>
+          </label>
 
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">
-              {error}
-            </p>
-          )}
+          {error ? <p className="auth-message auth-message-error">{error}</p> : null}
 
-          <button
-            type="submit"
-            className="btn btn-primary py-3 mt-2 w-full text-base"
-            disabled={isSubmitting}
-          >
-            <LogIn size={20} />
+          <button type="submit" disabled={isSubmitting} className="auth-submit-button">
+            {isSubmitting ? (
+              <Loader2 size={18} className="student-loader-icon" />
+            ) : (
+              <LogIn size={18} />
+            )}
             {isSubmitting ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
-        <div className="mt-6 text-center">
-          <p className="text-sm text-slate-500">
-            Don’t have an account?{' '}
-            <Link to="/register" className="text-blue-600 font-medium">
-              Register
-            </Link>
-          </p>
-        </div>
-      </div>
+        <p className="auth-footer-copy">
+          Do not have an account?{' '}
+          <Link to="/register" className="auth-footer-link">
+            Register
+          </Link>
+        </p>
+      </section>
     </div>
   );
 }

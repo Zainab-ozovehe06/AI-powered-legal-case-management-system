@@ -1,7 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Check, Loader2, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Check, Loader2, RotateCcw, Search, X } from 'lucide-react';
 import { api } from '../api/apiClient';
+import {
+  CASE_STATUS_STEPS,
+  getCaseStatusMeta,
+  getCaseStatusStepIndex,
+} from '../utils/caseStatus';
 
 const formatLabel = (value, fallback) => {
   const safeValue = (value || fallback || '').toString().trim();
@@ -94,79 +99,67 @@ const getCaseTypeClass = (caseType) => {
   return 'admin-cases-type-default';
 };
 
-const getStageNumber = (caseItem) => {
-  const stageValue =
-    caseItem.progress_stage ||
-    caseItem.current_stage ||
-    caseItem.stage ||
-    caseItem.case_stage ||
-    caseItem.status ||
-    'intake';
-
-  const numericStage = Number(stageValue);
-
-  if (Number.isInteger(numericStage) && numericStage >= 1 && numericStage <= 4) {
-    return numericStage;
-  }
-
-  const normalized = stageValue.toString().toLowerCase().replace(/[_-]+/g, ' ');
-
-  if (normalized.includes('closed') || normalized.includes('outcome')) return 4;
-  if (
-    normalized.includes('court') ||
-    normalized.includes('hearing') ||
-    normalized.includes('trial')
-  ) {
-    return 3;
-  }
-  if (
-    normalized.includes('investigation') ||
-    normalized.includes('assigned') ||
-    normalized.includes('urgent')
-  ) {
-    return 2;
-  }
-
-  return 1;
-};
-
-const caseStages = [
-  { number: 1, label: 'Intake' },
-  { number: 2, label: 'Investigation' },
-  { number: 3, label: 'In Court' },
-  { number: 4, label: 'Outcome' },
-];
-
 export default function AdminAllCases() {
+  const location = useLocation();
   const navigate = useNavigate();
 
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [undoNotice, setUndoNotice] = useState(null);
+  const [isRestoringCase, setIsRestoringCase] = useState(false);
 
-  useEffect(() => {
-    const fetchCases = async () => {
-      try {
-        setLoading(true);
-        const data = await api.getVisibleCases();
+  const fetchCases = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await api.getVisibleCases();
 
-        const sorted = [...data].sort((a, b) => {
+      const sorted = [...data]
+        .filter((caseItem) => !caseItem.is_deleted)
+        .sort((a, b) => {
           const dateA = a.date_opened?.seconds || 0;
           const dateB = b.date_opened?.seconds || 0;
           return dateB - dateA;
         });
 
-        setCases(sorted);
-      } catch (error) {
-        console.error('Error fetching all cases:', error);
-        alert('Failed to fetch cases: ' + error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCases();
+      setCases(sorted);
+    } catch (error) {
+      console.error('Error fetching all cases:', error);
+      alert('Failed to fetch cases: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchCases();
+  }, [fetchCases]);
+
+  useEffect(() => {
+    if (!location.state?.deletedCaseId) return;
+
+    setUndoNotice({
+      caseId: location.state.deletedCaseId,
+      name: location.state.deletedCaseName || 'Case',
+    });
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
+
+  const handleRestoreCase = async () => {
+    if (!undoNotice?.caseId) return;
+
+    setIsRestoringCase(true);
+    try {
+      await api.restoreCase(undoNotice.caseId);
+      await fetchCases();
+      setUndoNotice(null);
+    } catch (error) {
+      console.error('Error restoring case:', error);
+      alert('Failed to restore case: ' + error.message);
+    } finally {
+      setIsRestoringCase(false);
+    }
+  };
 
   const filteredCases = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -174,11 +167,16 @@ export default function AdminAllCases() {
     if (!term) return cases;
 
     return cases.filter((c) => {
+      const statusMeta = getCaseStatusMeta(c.status);
+
       return (
         (c.client_name || '').toLowerCase().includes(term) ||
         (c.case_type || '').toLowerCase().includes(term) ||
         (c.offence || '').toLowerCase().includes(term) ||
-        (c.status || '').toLowerCase().includes(term)
+        (c.caseDisplayId || '').toLowerCase().includes(term) ||
+        (c.status || '').toLowerCase().includes(term) ||
+        statusMeta.label.toLowerCase().includes(term) ||
+        statusMeta.displayLabel.toLowerCase().includes(term)
       );
     });
   }, [cases, searchTerm]);
@@ -200,6 +198,44 @@ export default function AdminAllCases() {
         </label>
       </div>
 
+      {undoNotice ? (
+        <div className="admin-cases-undo-banner" role="status">
+          <div className="admin-cases-undo-copy">
+            <span className="admin-cases-undo-title">
+              {undoNotice.name} was deleted.
+            </span>
+            <span className="admin-cases-undo-text">
+              Restore it now to return it to the active case list.
+            </span>
+          </div>
+
+          <div className="admin-cases-undo-actions">
+            <button
+              type="button"
+              onClick={handleRestoreCase}
+              disabled={isRestoringCase}
+              className="admin-cases-undo-button"
+            >
+              {isRestoringCase ? (
+                <Loader2 size={16} className="admin-cases-loader" />
+              ) : (
+                <RotateCcw size={16} />
+              )}
+              {isRestoringCase ? 'Restoring...' : 'Undo'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setUndoNotice(null)}
+              disabled={isRestoringCase}
+              className="admin-cases-undo-dismiss"
+              aria-label="Dismiss undo message"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="admin-cases-feedback">
           <Loader2 size={20} className="admin-cases-loader" />
@@ -212,8 +248,10 @@ export default function AdminAllCases() {
       ) : (
         <div className="admin-cases-list">
           {filteredCases.map((c) => {
-            const activeStage = getStageNumber(c);
+            const activeStage = getCaseStatusStepIndex(c.status);
             const caseTypeLabel = formatLabel(c.case_type, 'Case');
+            const displayCaseId = c.caseDisplayId || '---';
+            const routeCaseId = c.caseDisplayId || c.id;
             const court = getFirstValue(c, ['court', 'court_name', 'courtName']);
             const assigned = getFirstValue(c, [
               'assigned_to_name',
@@ -238,7 +276,7 @@ export default function AdminAllCases() {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => navigate(`/cases/${c.id}`)}
+                onClick={() => navigate(`/cases/${routeCaseId}`)}
                 className="admin-cases-card"
               >
                 <div className="admin-cases-card-top">
@@ -247,7 +285,7 @@ export default function AdminAllCases() {
                       {c.client_name || 'Untitled Client'}
                     </h2>
                     <p className="admin-cases-card-subtitle">
-                      {c.id} {'\u00B7'} {c.offence || 'General matter'}
+                      Case {displayCaseId} {'\u00B7'} {c.offence || 'General matter'}
                     </p>
                   </div>
 
@@ -285,20 +323,21 @@ export default function AdminAllCases() {
                 </div>
 
                 <div className="admin-cases-stage-row">
-                  {caseStages.map((stage, index) => {
-                    const isComplete = stage.number < activeStage;
-                    const isCurrent = stage.number === activeStage;
-                    const isLast = index === caseStages.length - 1;
+                  {CASE_STATUS_STEPS.map((stage, index) => {
+                    const stageNumber = index + 1;
+                    const isComplete = stageNumber < activeStage;
+                    const isCurrent = stageNumber === activeStage;
+                    const isLast = index === CASE_STATUS_STEPS.length - 1;
 
                     return (
-                      <div key={stage.number} className="admin-cases-stage">
+                      <div key={stage.value} className="admin-cases-stage">
                         <div className="admin-cases-stage-track">
                           <span
                             className={`admin-cases-stage-circle${
                               isComplete ? ' is-complete' : ''
                             }${isCurrent ? ' is-current' : ''}`}
                           >
-                            {isComplete ? <Check size={16} /> : stage.number}
+                            {isComplete ? <Check size={16} /> : stageNumber}
                           </span>
                           {!isLast ? (
                             <span
