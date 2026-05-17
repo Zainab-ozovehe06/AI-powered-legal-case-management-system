@@ -11,18 +11,28 @@ import groupsRouter from './routes/groups.js';
 import userRoutes from './routes/users.js';
 import settingsRoutes from './routes/settings.js';
 import aiRoutes from './routes/ai.js';
+
 dotenv.config();
 
 const app = express();
 
+/*
+  This list contains the frontend websites that are allowed
+  to send requests to this backend.
 
+  For now, only your local React frontend is allowed.
+  Later, after you host your frontend on Vercel, add your
+  Vercel frontend link here too.
+*/
 const allowedOrigins = [
   "http://localhost:5173"
-  
+  // Later add your frontend Vercel link here, for example:
+  // "https://your-frontend-name.vercel.app"
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
+    // Allow requests with no origin, like browser direct visits or server-to-server checks
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -32,8 +42,24 @@ app.use(cors({
   credentials: true
 }));
 
-
 app.use(express.json());
+
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Legal Case Management backend root route is working',
+    version: 'root-route-v1'
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Legal Case Management API is running',
+    version: 'health-route-v1'
+  });
+});
+
 
 app.use('/api/auth', authRouter);
 app.use('/api/admin', adminRouter);
@@ -45,10 +71,10 @@ app.use('/api/documents', documentsRouter);
 app.use('/api/users', userRoutes);
 app.use('/api/settings', settingsRoutes);
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Legal Case Management API is running' });
-});
-
+/*
+  Local development server.
+  This runs only on your laptop, not on Vercel.
+*/
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 5000;
 
@@ -58,4 +84,3 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 export default app;
-
