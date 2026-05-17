@@ -25,9 +25,9 @@ const app = express();
   Vercel frontend link here too.
 */
 const allowedOrigins = [
-  "http://localhost:5173"
-  // Later add your frontend Vercel link here, for example:
-  // "https://your-frontend-name.vercel.app"
+  "http://localhost:5173",
+  "https://ai-powered-legal-case-management-sy.vercel.app/"
+
 ];
 
 app.use(cors({
