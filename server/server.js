@@ -26,7 +26,8 @@ const app = express();
 */
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://ai-powered-legal-case-management-sy.vercel.app/"
+  "https://ai-powered-legal-case-management-sy.vercel.app/",
+  "https://ai-powered-legal-case-management-system-b7abofyhs.vercel.app/"
 
 ];
 
@@ -71,10 +72,7 @@ app.use('/api/documents', documentsRouter);
 app.use('/api/users', userRoutes);
 app.use('/api/settings', settingsRoutes);
 
-/*
-  Local development server.
-  This runs only on your laptop, not on Vercel.
-*/
+
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 5000;
 
