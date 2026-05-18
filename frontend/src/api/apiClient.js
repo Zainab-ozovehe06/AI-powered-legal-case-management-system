@@ -1,7 +1,9 @@
 import { auth } from '../services/firebase';
 import { withCaseDisplayIds } from '../utils/caseDisplayId';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+
 
 const getCurrentUserToken = async () => {
   const user = auth.currentUser;
