@@ -56,7 +56,7 @@ router.put('/', requireAuth, requireAdmin, async (req, res) => {
       inactivity_threshold_days,
     } = req.body;
 
-    const allowedStatuses = ['open', 'incourt', 'pending', 'closed'];
+    const allowedStatuses = ['open', 'incourt', 'pending', 'awaiting_hearing', 'closed'];
 
     if (
       default_case_status &&

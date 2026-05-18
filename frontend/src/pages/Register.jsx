@@ -18,6 +18,7 @@ export default function Register() {
 
     const trimmedName = name.trim();
 
+    
     if (!trimmedName) {
       setMessage('Full name is required.');
       return;
