@@ -1,6 +1,7 @@
 export const CASE_STATUS_STEPS = [
   { value: 'open', label: 'OPEN', displayLabel: 'Open' },
   { value: 'incourt', label: 'INCOURT', displayLabel: 'In Court' },
+  {value: 'court_date', label: 'AWAITING HEARING', displayLabel:'awaiting hearing'},
   { value: 'pending', label: 'PENDING', displayLabel: 'Pending' },
   { value: 'closed', label: 'CLOSED', displayLabel: 'Closed' },
 ];

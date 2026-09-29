@@ -1268,6 +1268,15 @@ ul {
   color: #fff;
 }
 
+.student-initial-sidebar .sidebar-collapse-button {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.student-initial-sidebar .sidebar-collapse-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
 .student-initial-sidebar .user-widget {
   border-top-color: var(--student-sidebar-border);
 }
@@ -1288,6 +1297,18 @@ ul {
 }
 
 .student-initial-sidebar .px-4 button:hover {
+  color: #fff;
+}
+
+.student-initial-sidebar .sidebar-logout-button {
+  border-color: var(--student-sidebar-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.student-initial-sidebar .sidebar-logout-button:hover {
+  border-color: transparent;
+  background: var(--student-sidebar-active);
   color: #fff;
 }
 
@@ -1354,16 +1375,24 @@ ul {
 }
 
 .sidebar-logout-button {
-  border: none;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-muted);
   font-size: 0.75rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: color 0.2s ease;
-  padding: 0;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  padding: 0.65rem 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
 }
 
 .sidebar-logout-button:hover {
+  background-color: #f1f5f9;
   color: var(--text-main);
 }
 
@@ -1378,13 +1407,14 @@ ul {
   color: #fff;
 }
 
+.admin-sidebar .logo-area > div,
 .admin-sidebar .sidebar-brand-mark {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
 }
 
 .admin-sidebar .nav-item {
-  color: #fff;
+  color: #ffffff;
 }
 
 .admin-sidebar .nav-item:hover,
@@ -1426,10 +1456,14 @@ ul {
 }
 
 .admin-sidebar .sidebar-logout-button {
-  color: rgba(255, 255, 255, 0.72);
+  border-color: var(--student-sidebar-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .admin-sidebar .sidebar-logout-button:hover {
+  border-color: transparent;
+  background: var(--student-sidebar-active);
   color: #fff;
 }
 
@@ -2426,6 +2460,393 @@ ul {
   animation: spin 1s linear infinite;
 }
 
+.lawyer-assignment-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  min-height: calc(100vh - 8rem);
+}
+
+.lawyer-assignment-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+.lawyer-assignment-eyebrow {
+  margin: 0 0 0.45rem;
+  color: #23298f;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.lawyer-assignment-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  color: var(--student-text);
+  font-size: clamp(2rem, 2.8vw, 3rem);
+  line-height: 1.12;
+}
+
+.lawyer-assignment-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  justify-content: flex-end;
+}
+
+.lawyer-assignment-stat {
+  min-height: 2.65rem;
+  border: 1px solid var(--student-border);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--student-text);
+  padding: 0.58rem 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.48rem;
+  font-size: 0.9rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.lawyer-assignment-stat svg {
+  color: #23298f;
+}
+
+.lawyer-assignment-layout {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.36fr) minmax(0, 1fr);
+  gap: 1.35rem;
+  align-items: start;
+}
+
+.lawyer-assignment-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  min-width: 0;
+}
+
+.lawyer-assignment-panel {
+  border: 1px solid var(--student-border);
+  border-radius: 0.8rem;
+  background: var(--student-surface);
+  padding: 1.35rem;
+}
+
+.lawyer-assignment-list-panel {
+  min-width: 0;
+}
+
+.lawyer-assignment-panel-header,
+.lawyer-assignment-list-header,
+.lawyer-assignment-current,
+.lawyer-assignment-selected-case,
+.lawyer-assignment-case-main {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.lawyer-assignment-panel-header,
+.lawyer-assignment-case-main {
+  justify-content: space-between;
+}
+
+.lawyer-assignment-panel-header {
+  margin-bottom: 1rem;
+}
+
+.lawyer-assignment-list-header {
+  align-items: flex-start;
+}
+
+.lawyer-assignment-panel-title {
+  margin: 0;
+  color: var(--student-text);
+  font-size: 1.08rem;
+  font-weight: 900;
+}
+
+.lawyer-assignment-panel-subtitle {
+  margin: 0.32rem 0 0;
+  color: var(--student-muted);
+  font-size: 0.9rem;
+}
+
+.lawyer-assignment-form,
+.lawyer-assignment-case-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.lawyer-assignment-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  color: var(--student-text);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.lawyer-assignment-input,
+.lawyer-assignment-search-input {
+  width: 100%;
+  border: 1px solid var(--student-border);
+  background: #fbfcff;
+  color: var(--student-text);
+  font: inherit;
+  outline: none;
+}
+
+.lawyer-assignment-input {
+  min-height: 2.8rem;
+  border-radius: 0.7rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.lawyer-assignment-input:focus,
+.lawyer-assignment-search-input:focus {
+  border-color: #9faeef;
+  box-shadow: 0 0 0 3px rgba(35, 41, 143, 0.08);
+}
+
+.lawyer-assignment-current {
+  border: 1px solid #d9e0f4;
+  border-radius: 0.7rem;
+  background: #f7f9ff;
+  color: #23298f;
+  padding: 0.8rem;
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.lawyer-assignment-message {
+  border-radius: 0.7rem;
+  padding: 0.8rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.lawyer-assignment-message-success {
+  border: 1px solid #c4ead8;
+  background: var(--student-success-soft);
+  color: var(--student-success);
+}
+
+.lawyer-assignment-message-error {
+  border: 1px solid #ffc9c3;
+  background: #fff1ef;
+  color: var(--student-danger);
+}
+
+.lawyer-assignment-primary-button,
+.lawyer-assignment-secondary-button {
+  border: none;
+  border-radius: 0.7rem;
+  min-height: 2.75rem;
+  padding: 0.72rem 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.lawyer-assignment-primary-button {
+  background: #23298f;
+  color: #ffffff;
+}
+
+.lawyer-assignment-primary-button:hover:not(:disabled) {
+  background: #171c72;
+}
+
+.lawyer-assignment-secondary-button {
+  width: 100%;
+  margin-top: 1rem;
+  border: 1px solid var(--student-border);
+  background: #ffffff;
+  color: #23298f;
+}
+
+.lawyer-assignment-secondary-button:hover:not(:disabled) {
+  border-color: #bcc8db;
+  background: #f8faff;
+}
+
+.lawyer-assignment-primary-button:disabled,
+.lawyer-assignment-secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.lawyer-assignment-selected-icon {
+  width: 2.8rem;
+  height: 2.8rem;
+  border-radius: 0.8rem;
+  background: #eef2ff;
+  color: #23298f;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lawyer-assignment-selected-copy {
+  min-width: 0;
+}
+
+.lawyer-assignment-selected-copy span,
+.lawyer-assignment-selected-grid span,
+.lawyer-assignment-case-details span {
+  display: block;
+  color: var(--student-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.lawyer-assignment-selected-copy strong {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--student-text);
+  font-size: 1rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.lawyer-assignment-selected-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.lawyer-assignment-selected-grid div,
+.lawyer-assignment-case-details div {
+  min-width: 0;
+  border: 1px solid var(--student-border);
+  border-radius: 0.7rem;
+  background: #fbfcff;
+  padding: 0.85rem;
+}
+
+.lawyer-assignment-selected-grid strong,
+.lawyer-assignment-case-details strong {
+  display: block;
+  margin-top: 0.28rem;
+  color: var(--student-text);
+  font-size: 0.92rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.lawyer-assignment-search {
+  position: relative;
+  width: min(22rem, 100%);
+  flex-shrink: 0;
+}
+
+.lawyer-assignment-search-icon {
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--student-muted);
+  pointer-events: none;
+}
+
+.lawyer-assignment-search-input {
+  min-height: 2.75rem;
+  border-radius: 0.7rem;
+  padding: 0.72rem 0.85rem 0.72rem 2.65rem;
+}
+
+.lawyer-assignment-case-card {
+  width: 100%;
+  border: 1px solid var(--student-border);
+  border-radius: 0.8rem;
+  background: #ffffff;
+  color: inherit;
+  padding: 1rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.lawyer-assignment-case-card:hover,
+.lawyer-assignment-case-card.is-selected {
+  border-color: #aeb9ef;
+  background: #fbfcff;
+  box-shadow: 0 10px 24px rgba(20, 34, 92, 0.06);
+}
+
+.lawyer-assignment-case-title {
+  margin: 0;
+  color: var(--student-text);
+  font-size: 1rem;
+  line-height: 1.35;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.lawyer-assignment-case-meta {
+  margin: 0.32rem 0 0;
+  color: var(--student-muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.lawyer-assignment-status {
+  border-radius: 999px;
+  background: #fff1ef;
+  color: var(--student-danger);
+  padding: 0.36rem 0.62rem;
+  font-size: 0.76rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.lawyer-assignment-status.is-assigned {
+  background: var(--student-success-soft);
+  color: var(--student-success);
+}
+
+.lawyer-assignment-case-details {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.lawyer-assignment-feedback,
+.lawyer-assignment-empty {
+  min-height: 10rem;
+  color: var(--student-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  text-align: center;
+}
+
+.lawyer-assignment-empty {
+  border: 1px dashed var(--student-border);
+  border-radius: 0.75rem;
+  background: #fbfcff;
+  font-weight: 800;
+}
+
 .group-management-page {
   display: flex;
   flex-direction: column;
@@ -2469,6 +2890,13 @@ ul {
   align-items: start;
 }
 
+.group-management-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  min-width: 0;
+}
+
 .group-management-panel {
   border: 1px solid var(--student-border);
   border-radius: 0.8rem;
@@ -2485,7 +2913,9 @@ ul {
 .group-management-card-title-row,
 .group-management-member-row,
 .group-management-add-row,
-.group-management-leader-row {
+.group-management-leader-row,
+.group-management-supervisor-row,
+.group-management-assignment-summary {
   display: flex;
   align-items: center;
   gap: 0.8rem;
@@ -2647,6 +3077,56 @@ ul {
   margin-top: 1rem;
   align-items: center;
   color: #8a6100;
+}
+
+.group-management-supervisor-row,
+.group-management-assignment-summary {
+  border: 1px solid #dfe6f2;
+  border-radius: 0.7rem;
+  background: #ffffff;
+  padding: 0.75rem 0.85rem;
+  color: #14624f;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.group-management-supervisor-row {
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.group-management-supervisor-row span {
+  color: var(--student-muted);
+  font-size: 0.8rem;
+}
+
+.group-management-supervisor-row strong {
+  color: var(--student-text);
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+.group-management-assignment-summary {
+  align-items: flex-start;
+  line-height: 1.45;
+}
+
+.group-management-assignment-message {
+  border-radius: 0.7rem;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.group-management-assignment-success {
+  background: var(--student-success-soft);
+  color: var(--student-success);
+}
+
+.group-management-assignment-error {
+  background: #fff1ef;
+  color: var(--student-danger);
 }
 
 .group-management-member-list {
@@ -6266,6 +6746,10 @@ ul {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .lawyer-assignment-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .admin-settings-summary-panel {
     position: static;
   }
@@ -6334,6 +6818,7 @@ ul {
   }
 
   .group-management-hero,
+  .lawyer-assignment-hero,
   .group-management-card-header,
   .group-management-add-row,
   .group-management-leader-row {
@@ -6412,7 +6897,8 @@ ul {
   .admin-stat-card,
   .admin-dashboard-panel,
   .manage-users-panel,
-  .group-management-panel {
+  .group-management-panel,
+  .lawyer-assignment-panel {
     padding: 1.4rem;
   }
 
@@ -6564,6 +7050,24 @@ ul {
   .case-detail-document-actions {
     justify-content: flex-start;
     width: 100%;
+  }
+
+  .lawyer-assignment-hero,
+  .lawyer-assignment-list-header,
+  .lawyer-assignment-case-main {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .lawyer-assignment-search,
+  .lawyer-assignment-primary-button,
+  .lawyer-assignment-secondary-button {
+    width: 100%;
+  }
+
+  .lawyer-assignment-selected-grid,
+  .lawyer-assignment-case-details {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

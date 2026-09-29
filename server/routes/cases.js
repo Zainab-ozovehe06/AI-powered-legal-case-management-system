@@ -12,11 +12,13 @@ import {
   ASSIGNMENT_TYPE,
   getActorId,
   getAssignedGroupsForCase,
+  getDirectCaseIdsForUser,
   getGroupIdsForUser,
   getVisibleCaseIdsForStudent,
   isCaseAssignedToGroup,
   normalizeText,
 } from '../utils/groupCollaboration.js';
+import { assignLawyerToCase } from '../utils/lawyerAssignment.js';
 
 const router = express.Router();
 
@@ -53,6 +55,25 @@ const normalizeCaseStatus = (status) => {
 };
 
 const isCaseDeleted = (caseData) => caseData?.is_deleted === true;
+
+const getCasesByIds = async (caseIds) => {
+  const uniqueCaseIds = [...new Set(caseIds.map(normalizeText).filter(Boolean))];
+
+  if (!uniqueCaseIds.length) {
+    return [];
+  }
+
+  const caseDocs = await Promise.all(
+    uniqueCaseIds.map((caseId) => db.collection('cases').doc(caseId).get())
+  );
+
+  return caseDocs
+    .filter((doc) => doc.exists && !isCaseDeleted(doc.data()))
+    .map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+};
 
 const getCaseEditableFields = (body) => {
   const updates = {};
@@ -111,23 +132,15 @@ router.get('/', requireAuth, async (req, res) => {
     // Law student sees cases they created, direct assignments, and group assignments.
     if (currentUser.role === 'law_student') {
       const caseIds = await getVisibleCaseIdsForStudent(actorId);
+      const cases = await getCasesByIds(caseIds);
 
-      if (!caseIds.length) {
-        return res.status(200).json([]);
-      }
+      return res.status(200).json(cases);
+    }
 
-      const casePromises = caseIds.map((caseId) =>
-        db.collection('cases').doc(caseId).get()
-      );
-
-      const caseDocs = await Promise.all(casePromises);
-
-      const cases = caseDocs
-        .filter((doc) => doc.exists && !isCaseDeleted(doc.data()))
-        .map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+    // Lawyers see cases directly assigned to them by an admin.
+    if (currentUser.role === 'lawyer') {
+      const caseIds = await getDirectCaseIdsForUser(actorId);
+      const cases = await getCasesByIds(caseIds);
 
       return res.status(200).json(cases);
     }
@@ -241,6 +254,10 @@ router.patch('/:caseId', requireAuth, canAccessCase, async (req, res) => {
 
     if (!actorId) {
       return res.status(401).json({ error: 'Authenticated user ID missing' });
+    }
+
+    if (!['admin', 'law_student'].includes(req.currentUser?.role)) {
+      return res.status(403).json({ error: 'Only admins and students can edit case details' });
     }
 
     let updates;
@@ -503,6 +520,23 @@ router.post('/:caseId/assign-group', requireAuth, requireAdminRole, async (req, 
   }
 });
 
+// ASSIGN case to lawyer
+router.post('/:caseId/assign-lawyer', requireAuth, requireAdminRole, async (req, res) => {
+  try {
+    const { caseId } = req.params;
+    const lawyerId = normalizeText(req.body?.lawyer_id || req.body?.lawyerId);
+    const actorId = getActorId(req);
+    const result = await assignLawyerToCase({ caseId, lawyerId, actorId });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error assigning case to lawyer:', error);
+    return res.status(error.statusCode || 500).json({
+      error: error.message || 'Failed to assign case to lawyer',
+    });
+  }
+});
+
 // SUBMIT group reflection for a case
 router.post(
   '/:caseId/group-reflections',
@@ -537,7 +571,7 @@ router.post(
         title,
         content,
         status: 'submitted',
-        intended_recipient_role: 'student_supervisor',
+        role: 'supervisor',
         supervisor_id: null,
         submitted_at: now,
         updated_at: now,

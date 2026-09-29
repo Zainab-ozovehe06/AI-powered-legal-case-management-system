@@ -1,5 +1,7 @@
 frontend/node_modules/
 server/node_modules/
 server/uploads/
+server/resources/law-clinic-pdfs/*
+!server/resources/law-clinic-pdfs/README.md
 .env
 serviceAccountKey.json

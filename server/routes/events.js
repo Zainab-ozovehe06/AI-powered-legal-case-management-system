@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/authenticate.js';
 import {
   ASSIGNMENT_TYPE,
   canStudentAccessCase,
+  getDirectCaseIdsForUser,
   getVisibleCaseIdsForStudent,
   normalizeText,
 } from '../utils/groupCollaboration.js';
@@ -135,7 +136,20 @@ const loadCaseForEventAccess = async (caseId, req) => {
     throw error;
   }
 
-  if (currentUser.role !== 'admin' && currentUser.role !== 'law_student') {
+  const lawyerHasAccess =
+    currentUser.role === 'lawyer' && assignedUserIds.includes(actorId);
+
+  if (currentUser.role === 'lawyer' && !lawyerHasAccess) {
+    const error = new Error('You are not assigned to this case');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (
+    currentUser.role !== 'admin' &&
+    currentUser.role !== 'law_student' &&
+    currentUser.role !== 'lawyer'
+  ) {
     const error = new Error('Access denied');
     error.statusCode = 403;
     throw error;
@@ -165,6 +179,12 @@ const validateEventPayload = async (body, req, existingEvent = null) => {
   const actorId = getActorId(req);
   const caseId = normalizeText(body.case_id ?? existingEvent?.case_id);
   const loadedCase = await loadCaseForEventAccess(caseId, req);
+
+  if (currentUser.role === 'lawyer') {
+    const error = new Error('Lawyers can view scheduled events but cannot change them');
+    error.statusCode = 403;
+    throw error;
+  }
 
   const title = normalizeText(body.title ?? existingEvent?.title);
   const eventType = normalizeText(
@@ -375,8 +395,11 @@ router.get('/events', requireAuth, async (req, res) => {
     if (currentUser.role === 'admin') {
       const snapshot = await db.collection('events').get();
       events = snapshot.docs.map(serializeEventDoc);
-    } else if (currentUser.role === 'law_student') {
-      const caseIds = await getVisibleCaseIdsForStudent(actorId);
+    } else if (currentUser.role === 'law_student' || currentUser.role === 'lawyer') {
+      const caseIds =
+        currentUser.role === 'law_student'
+          ? await getVisibleCaseIdsForStudent(actorId)
+          : await getDirectCaseIdsForUser(actorId);
 
       if (!caseIds.length) {
         return res.status(200).json([]);
@@ -538,6 +561,12 @@ router.delete('/events/:eventId', requireAuth, async (req, res) => {
     };
 
     await assertVisibleEvent(existingEvent, req);
+
+    if (req.currentUser.role === 'lawyer') {
+      return res.status(403).json({
+        error: 'Lawyers can view scheduled events but cannot change them',
+      });
+    }
 
     if (hardDelete) {
       if (req.currentUser.role !== 'admin') {
