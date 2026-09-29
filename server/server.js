@@ -16,18 +16,10 @@ dotenv.config();
 
 const app = express();
 
-/*
-  This list contains the frontend websites that are allowed
-  to send requests to this backend.
-
-  For now, only your local React frontend is allowed.
-  Later, after you host your frontend on Vercel, add your
-  Vercel frontend link here too.
-*/
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://ai-powered-legal-case-management-sy.vercel.app/",
-  "https://ai-powered-legal-case-management-sy-b7abofyhs.vercel.app/"
+  "https://ai-powered-legal-case-management-sy.vercel.app",
+  "https://ai-powered-legal-case-management-sy-b7abofyhs.vercel.app"
 
 ];
 
@@ -72,13 +64,10 @@ app.use('/api/documents', documentsRouter);
 app.use('/api/users', userRoutes);
 app.use('/api/settings', settingsRoutes);
 
+const PORT = process.env.PORT || 5000;
 
-if (process.env.NODE_ENV !== "production") {
-  const PORT = process.env.PORT || 5000;
-
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
 export default app;
