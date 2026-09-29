@@ -16,6 +16,7 @@ import StudentCases from './pages/StudentCases';
 import NewCase from './pages/NewCase';
 import GroupManagement from './pages/GroupManagement';
 import LegalAssistant from './pages/LegalAssistant';
+import LawyerAssignment from './pages/LawyerAssignment';
 
 const DashboardRouter = () => {
   const { currentUser, userRole } = useAuth();
@@ -23,6 +24,7 @@ const DashboardRouter = () => {
   if (!currentUser) return <Navigate to="/login" replace />;
   if (userRole === 'admin') return <AdminDashboard />;
   if (userRole === 'law_student') return <StudentDashboard />;
+  if (userRole === 'lawyer') return <StudentCases />;
 
   return <Navigate to="/login" replace />;
 };
@@ -100,6 +102,15 @@ function App() {
           />
 
           <Route
+            path="admin/lawyer-assignment"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin']}>
+                <LawyerAssignment />
+              </RoleProtectedRoute>
+            }
+          />
+
+          <Route
             path="admin/settings"
             element={
               <RoleProtectedRoute allowedRoles={['admin']}>
@@ -111,7 +122,7 @@ function App() {
           <Route
             path="cases"
             element={
-              <RoleProtectedRoute allowedRoles={['law_student']}>
+              <RoleProtectedRoute allowedRoles={['law_student', 'lawyer']}>
                 <StudentCases />
               </RoleProtectedRoute>
             }
@@ -129,7 +140,7 @@ function App() {
           <Route
             path="cases/:caseId"
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'law_student']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'law_student', 'lawyer']}>
                 <CaseDetail />
               </RoleProtectedRoute>
             }

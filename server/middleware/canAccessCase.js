@@ -2,6 +2,7 @@ import { db } from '../config/firebase.js';
 import {
   canStudentAccessCase,
   getActorId,
+  getDirectCaseIdsForUser,
   isCaseDeleted,
 } from '../utils/groupCollaboration.js';
 
@@ -33,6 +34,22 @@ const canAccessCase = async (req, res, next) => {
       const hasAccess = await canStudentAccessCase(actorId, caseId, caseDoc.data());
 
       if (!hasAccess) {
+        return res.status(403).json({ error: 'You are not assigned to this case' });
+      }
+
+      return next();
+    }
+
+    if (currentUser.role === 'lawyer') {
+      const caseDoc = await db.collection('cases').doc(caseId).get();
+
+      if (!caseDoc.exists || isCaseDeleted(caseDoc.data())) {
+        return res.status(404).json({ error: 'Case not found' });
+      }
+
+      const visibleCaseIds = await getDirectCaseIdsForUser(actorId);
+
+      if (!visibleCaseIds.includes(caseId)) {
         return res.status(403).json({ error: 'You are not assigned to this case' });
       }
 

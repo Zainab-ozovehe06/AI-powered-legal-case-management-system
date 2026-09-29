@@ -19,11 +19,22 @@ const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadsRoot = path.resolve(__dirname, '..', 'uploads');
+const defaultClinicResourceRoot = path.resolve(
+  __dirname,
+  '..',
+  'resources',
+  'law-clinic-pdfs'
+);
+const clinicResourceRoot = process.env.LAW_CLINIC_RESOURCE_DIR
+  ? path.resolve(process.env.LAW_CLINIC_RESOURCE_DIR)
+  : defaultClinicResourceRoot;
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_UPLOAD_FILE_BYTES = 8 * 1024 * 1024;
+const MAX_CLINIC_RESOURCE_BYTES = 18 * 1024 * 1024;
+const MAX_CLINIC_RESOURCE_DOCUMENTS = 6;
 const MAX_STORED_DOCUMENT_BYTES = 14 * 1024 * 1024;
-const MAX_TOTAL_INLINE_BYTES = 20 * 1024 * 1024;
+const MAX_TOTAL_INLINE_BYTES = 26 * 1024 * 1024;
 const MAX_UPLOAD_FILES = 4;
 const MAX_STORED_DOCUMENTS = 5;
 const MAX_DETAILED_CASES = 8;
@@ -132,6 +143,20 @@ const resolveUploadPath = (relativePath) => {
 
   if (relativeToRoot.startsWith('..') || path.isAbsolute(relativeToRoot)) {
     throw new Error('Invalid document path');
+  }
+
+  return absolutePath;
+};
+
+const resolveClinicResourcePath = (relativePath) => {
+  const absolutePath = path.resolve(
+    clinicResourceRoot,
+    path.normalize(relativePath || '')
+  );
+  const relativeToRoot = path.relative(clinicResourceRoot, absolutePath);
+
+  if (relativeToRoot.startsWith('..') || path.isAbsolute(relativeToRoot)) {
+    throw new Error('Invalid clinic resource path');
   }
 
   return absolutePath;
@@ -596,11 +621,12 @@ const buildPrompt = ({
 You are Nile Law Clinic's AI assistant. Answer questions for authenticated clinic users using the provided database context, stored case documents, and user-attached reference files.
 
 Accuracy rules:
-- Treat the provided database context and PDFs/files as the only source of case facts.
+- Review the law clinic resource PDFs/files before answering sensitive, procedural, policy, ethics, confidentiality, intake, or client-handling questions.
+- Treat the provided clinic resources, database context, and PDFs/files as the only source of clinic and case facts.
 - Do not invent clients, dates, case statuses, events, document contents, statutes, authorities, or procedural facts.
-- If the available sources do not answer something, say that the available database/documents do not show it.
+- If the available sources do not answer something, say that the available clinic resources/database/documents do not show it.
 - Prefer direct answers for direct questions. Only draft memos, reports, notes, or letters when the user asks for that.
-- When you use a source, mention the case display ID, case name, stored document name, or uploaded file name in the answer.
+- When you use a source, mention the clinic resource name, case display ID, case name, stored document name, or uploaded file name in the answer.
 - Respect access control: answer only from the context supplied in this request.
 - This is legal research and drafting support, not final legal advice.
 
@@ -647,6 +673,124 @@ const buildUploadedReferenceParts = (files) =>
       },
     ];
   });
+
+const listClinicResourceFiles = async (directory = clinicResourceRoot) => {
+  let entries = [];
+
+  try {
+    entries = await fs.readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+
+  const nestedEntries = await Promise.all(
+    entries.map(async (entry) => {
+      const absolutePath = path.join(directory, entry.name);
+
+      if (entry.isDirectory()) {
+        return listClinicResourceFiles(absolutePath);
+      }
+
+      if (!entry.isFile()) return [];
+
+      const relativePath = path.relative(clinicResourceRoot, absolutePath);
+      const mimeType = getReferenceMimeType({ name: entry.name });
+
+      if (!mimeType) return [];
+
+      const stats = await fs.stat(absolutePath);
+
+      return [
+        {
+          absolutePath,
+          relativePath,
+          name: entry.name,
+          mimeType,
+          size: stats.size,
+          modifiedAt: stats.mtimeMs,
+        },
+      ];
+    })
+  );
+
+  return nestedEntries.flat();
+};
+
+const selectClinicResourceCandidates = async (prompt) => {
+  const tokens = normalizeTokens(prompt);
+  const promptLooksSensitive =
+    /\b(confidential|sensitive|ethic|ethical|privilege|privacy|intake|client|advice|policy|procedure|manual|guideline|template|form|resource|clinic|pdf|document)\b/i.test(
+      prompt
+    );
+  const resourceFiles = await listClinicResourceFiles();
+
+  return resourceFiles
+    .map((resource) => {
+      const searchableText = resource.relativePath.replace(/[\\/_.-]+/g, ' ');
+
+      return {
+        resource,
+        score:
+          scoreText(searchableText, tokens) +
+          (promptLooksSensitive ? 4 : 0) +
+          (resource.mimeType === 'application/pdf' ? 2 : 0),
+      };
+    })
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.resource.modifiedAt - a.resource.modifiedAt;
+    })
+    .slice(0, MAX_CLINIC_RESOURCE_DOCUMENTS)
+    .map((item) => item.resource);
+};
+
+const buildClinicResourceReferenceParts = async ({ prompt, existingInlineBytes }) => {
+  const parts = [];
+  const references = [];
+  let resourceBytes = 0;
+  const candidates = await selectClinicResourceCandidates(prompt);
+
+  for (const resource of candidates) {
+    if (references.length >= MAX_CLINIC_RESOURCE_DOCUMENTS) break;
+
+    if (
+      resourceBytes + resource.size > MAX_CLINIC_RESOURCE_BYTES ||
+      existingInlineBytes + resourceBytes + resource.size > MAX_TOTAL_INLINE_BYTES
+    ) {
+      continue;
+    }
+
+    try {
+      const absolutePath = resolveClinicResourcePath(resource.relativePath);
+      const buffer = await fs.readFile(absolutePath);
+
+      resourceBytes += buffer.length;
+      parts.push({
+        text: `Law clinic resource document: ${resource.relativePath} (${resource.mimeType}, ${buffer.length} bytes). Review this source before answering sensitive clinic questions.`,
+      });
+      parts.push({
+        inline_data: {
+          mime_type: resource.mimeType,
+          data: buffer.toString('base64'),
+        },
+      });
+      references.push({
+        name: resource.relativePath,
+        type: 'clinic_resource',
+        mimeType: resource.mimeType,
+        size: buffer.length,
+      });
+    } catch (error) {
+      console.warn(
+        `Skipping clinic AI resource document ${resource.relativePath}:`,
+        error.message
+      );
+    }
+  }
+
+  return { parts, references };
+};
 
 const selectStoredDocumentCandidates = ({ prompt, selectedCases, related }) => {
   const tokens = normalizeTokens(prompt);
@@ -790,11 +934,20 @@ router.post('/assistant', requireAuth, upload.array('references', MAX_UPLOAD_FIL
       selectedCases,
       related,
     });
+    const clinicResourceReferences = await buildClinicResourceReferenceParts({
+      prompt,
+      existingInlineBytes: uploadBytes,
+    });
     const storedReferences = await buildStoredDocumentReferenceParts({
       prompt,
       selectedCases,
       related,
-      existingInlineBytes: uploadBytes,
+      existingInlineBytes:
+        uploadBytes +
+        clinicResourceReferences.references.reduce(
+          (total, reference) => total + (reference.size || 0),
+          0
+        ),
     });
     const conversationSummary = getConversationSummary(req.body?.conversation);
     const promptText = buildPrompt({
@@ -820,6 +973,7 @@ router.post('/assistant', requireAuth, upload.array('references', MAX_UPLOAD_FIL
             parts: [
               { text: 'Use these source materials before answering.' },
               { text: databaseContext },
+              ...clinicResourceReferences.parts,
               ...storedReferences.parts,
               ...uploadedReferenceParts,
               { text: promptText },
@@ -859,6 +1013,7 @@ router.post('/assistant', requireAuth, upload.array('references', MAX_UPLOAD_FIL
           type: 'database',
           count: visibleCases.length,
         },
+        ...clinicResourceReferences.references,
         ...selectedCases.map((caseItem) => ({
           name: `Case ${caseItem.caseDisplayId}: ${getCaseTitle(caseItem)}`,
           type: 'case_record',
@@ -876,6 +1031,7 @@ router.post('/assistant', requireAuth, upload.array('references', MAX_UPLOAD_FIL
       retrieval: {
         visibleCaseCount: visibleCases.length,
         detailedCaseCount: selectedCases.length,
+        clinicResourceCount: clinicResourceReferences.references.length,
         storedDocumentCount: storedReferences.references.length,
         uploadedReferenceCount: files.length,
       },

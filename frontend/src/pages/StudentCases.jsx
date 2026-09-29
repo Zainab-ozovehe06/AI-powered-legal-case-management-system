@@ -24,9 +24,25 @@ const formatLabel = (value, fallback) => {
 };
 
 const formatDate = (value) => {
-  const date = value?.toDate?.();
+  if (!value) {
+    return 'No date available';
+  }
 
-  if (!date) {
+  let date = null;
+
+  if (typeof value.toDate === 'function') {
+    date = value.toDate();
+  } else if (typeof value.seconds === 'number') {
+    date = new Date(value.seconds * 1000);
+  } else if (typeof value._seconds === 'number') {
+    date = new Date(value._seconds * 1000);
+  } else if (typeof value === 'string' || typeof value === 'number') {
+    date = new Date(value);
+  } else if (value instanceof Date) {
+    date = value;
+  }
+
+  if (!date || Number.isNaN(date.getTime())) {
     return 'No date available';
   }
 

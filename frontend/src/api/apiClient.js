@@ -563,6 +563,25 @@ export const api = {
     return response.json();
   },
 
+  assignSupervisorToGroup: async (groupId, supervisorId) => {
+    const headers = await getAuthHeaders();
+
+    const response = await fetch(
+      `${API_BASE_URL}/admin/groups/${groupId}/assign-supervisor`,
+      {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ supervisorId }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(await getErrorMessage(response));
+    }
+
+    return response.json();
+  },
+
   assignCaseToGroup: async (caseId, groupId) => {
     const headers = await getAuthHeaders();
 
@@ -570,6 +589,22 @@ export const api = {
       method: 'POST',
       headers,
       body: JSON.stringify({ group_id: groupId }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await getErrorMessage(response));
+    }
+
+    return response.json();
+  },
+
+  assignCaseToLawyer: async (caseId, lawyerId) => {
+    const headers = await getAuthHeaders();
+
+    const response = await fetch(`${API_BASE_URL}/admin/cases/${caseId}/assign-lawyer`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ lawyer_id: lawyerId }),
     });
 
     if (!response.ok) {

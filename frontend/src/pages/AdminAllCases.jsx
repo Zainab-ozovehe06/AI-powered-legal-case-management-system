@@ -254,6 +254,8 @@ export default function AdminAllCases() {
             const routeCaseId = c.caseDisplayId || c.id;
             const court = getFirstValue(c, ['court', 'court_name', 'courtName']);
             const assigned = getFirstValue(c, [
+              'assigned_lawyer_name',
+              'assigned_lawyer_email',
               'assigned_to_name',
               'assigned_to',
               'assigned_student_name',

@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 const roleLabelMap = {
   admin: 'Admin',
   law_student: 'Student',
+  lawyer: 'Lawyer',
+  supervisor: 'Supervisor',
 };
 
 const getInitials = (value) => {
@@ -30,7 +32,8 @@ export const Topbar = ({ collapsed, setCollapsed }) => {
   const isStudentPortalView = userRole === 'law_student';
 
   let breadcrumb = 'Home';
-  if (pathName.includes('cases')) breadcrumb = 'Home > Cases';
+  if (pathName.includes('lawyer-assignment')) breadcrumb = 'Home > Lawyer Assignment';
+  else if (pathName.includes('cases')) breadcrumb = 'Home > Cases';
   else if (pathName.includes('groups')) breadcrumb = 'Home > Student Groups';
   else if (pathName.includes('calendar')) breadcrumb = 'Home > Calendar';
   else if (pathName.includes('ai')) breadcrumb = 'Home > AI Assistant';
