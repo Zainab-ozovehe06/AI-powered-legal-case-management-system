@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -17,19 +18,17 @@ dotenv.config();
 const app = express();
 
 const allowedOrigins = [
-  "http://localhost:5173",
-  "https://ai-powered-legal-case-management-sy.vercel.app",
-  "https://ai-powered-legal-case-management-sy-b7abofyhs.vercel.app"
-
+  'http://localhost:5173',
+  'https://ai-powered-legal-case-management-sy.vercel.app',
+  'https://ai-powered-legal-case-management-sy-b7abofyhs.vercel.app'
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin, like browser direct visits or server-to-server checks
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true
@@ -41,7 +40,7 @@ app.get('/', (req, res) => {
   res.status(200).json({
     status: 'ok',
     message: 'Legal Case Management backend root route is working',
-    version: 'root-route-v1'
+    version: 'vercel-root-v1'
   });
 });
 
@@ -49,10 +48,9 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
     message: 'Legal Case Management API is running',
-    version: 'health-route-v1'
+    version: 'vercel-health-v1'
   });
 });
-
 
 app.use('/api/auth', authRouter);
 app.use('/api/admin', adminRouter);
@@ -64,10 +62,13 @@ app.use('/api/documents', documentsRouter);
 app.use('/api/users', userRoutes);
 app.use('/api/settings', settingsRoutes);
 
-const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 5000;
+
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
 export default app;
