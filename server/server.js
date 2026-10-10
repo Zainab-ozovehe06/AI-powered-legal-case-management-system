@@ -19,8 +19,7 @@ const app = express();
 
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://ai-powered-legal-case-management-sy.vercel.app',
-  'https://ai-powered-legal-case-management-sy.vercel.app/'
+  'https://ai-powered-legal-case-management-sy.vercel.app'
   
 ];
 
