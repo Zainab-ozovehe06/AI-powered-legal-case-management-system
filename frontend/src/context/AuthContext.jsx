@@ -1,6 +1,13 @@
+
 import { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../services/firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+} from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
 const AuthContext = createContext({});
@@ -18,7 +25,6 @@ export const AuthProvider = ({ children }) => {
         if (!user) {
           setCurrentUser(null);
           setUserRole(null);
-          setLoading(false);
           return;
         }
 
@@ -29,7 +35,6 @@ export const AuthProvider = ({ children }) => {
           console.error('No Firestore profile found for this user.');
           setCurrentUser(null);
           setUserRole(null);
-          setLoading(false);
           return;
         }
 
@@ -59,15 +64,20 @@ export const AuthProvider = ({ children }) => {
     return signInWithEmailAndPassword(auth, email, password);
   };
 
-  const logout = () => {
-    return signOut(auth);
+  const loginWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    return signInWithPopup(auth, provider);
   };
+
+  const logout = () => signOut(auth);
 
   const value = {
     currentUser,
     userRole,
     login,
+    loginWithGoogle,
     logout,
+    loading,
   };
 
   return (
