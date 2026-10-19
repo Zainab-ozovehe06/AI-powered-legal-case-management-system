@@ -12,6 +12,22 @@ import {
 const router = express.Router();
 
 const EVENT_TYPES = new Set([
+  // New event types
+  'summit',
+  'conference',
+  'street_lawyering',
+  'reform_pre_trial_detention',
+  'community_outreach',
+  'workshop',
+  'training',
+  'orientation',
+  'competitions',
+  'virtual_events',
+  'seminars_webinars',
+  'law_clinic_meetings',
+  'unit_meetings',
+
+  // Legacy types retained for existing events
   'court_date',
   'client_interview',
   'clinic_meeting',
@@ -33,7 +49,9 @@ const normalizeOptionalText = (value) => {
 const normalizeStringArray = (value) => {
   if (!Array.isArray(value)) return [];
 
-  return [...new Set(value.map((item) => normalizeText(item)).filter(Boolean))];
+  return [
+    ...new Set(value.map((item) => normalizeText(item)).filter(Boolean)),
+  ];
 };
 
 const isCaseDeleted = (caseData) => caseData?.is_deleted === true;
@@ -64,6 +82,7 @@ const getAssignedUserIdsForCase = async (caseId) => {
     .get();
 
   const assignments = snapshot.docs.map((doc) => doc.data());
+
   const directUserIds = assignments
     .filter(
       (assignment) =>
@@ -72,8 +91,11 @@ const getAssignedUserIdsForCase = async (caseId) => {
     )
     .map((assignment) => normalizeText(assignment.user_id))
     .filter(Boolean);
+
   const groupIds = assignments
-    .filter((assignment) => assignment.assigned_to_type === ASSIGNMENT_TYPE.GROUP)
+    .filter(
+      (assignment) => assignment.assigned_to_type === ASSIGNMENT_TYPE.GROUP
+    )
     .map((assignment) => normalizeText(assignment.group_id))
     .filter(Boolean);
 
@@ -162,9 +184,33 @@ const loadCaseForEventAccess = async (caseId, req) => {
   };
 };
 
+const canViewGeneralEvent = (eventData, req) => {
+  if (req.currentUser?.role === 'admin') return true;
+  if (!['law_student', 'lawyer'].includes(req.currentUser?.role)) return false;
+
+  const actorId = getActorId(req);
+  return Boolean(
+    actorId &&
+      (eventData.created_by === actorId ||
+        normalizeStringArray(eventData.assigned_users).includes(actorId))
+  );
+};
+
+const assertGeneralEventManagement = (eventData, req) => {
+  if (
+    !eventData.case_id &&
+    req.currentUser?.role === 'law_student' &&
+    eventData.created_by !== getActorId(req)
+  ) {
+    const error = new Error('Students can only change general events they created');
+    error.statusCode = 403;
+    throw error;
+  }
+};
+
 const assertVisibleEvent = async (eventData, req) => {
   if (!eventData?.case_id) {
-    if (req.currentUser?.role === 'admin') return null;
+    if (canViewGeneralEvent(eventData, req)) return null;
 
     const error = new Error('You are not allowed to access this event');
     error.statusCode = 403;
@@ -177,25 +223,53 @@ const assertVisibleEvent = async (eventData, req) => {
 const validateEventPayload = async (body, req, existingEvent = null) => {
   const currentUser = req.currentUser;
   const actorId = getActorId(req);
-  const caseId = normalizeText(body.case_id ?? existingEvent?.case_id);
-  const loadedCase = await loadCaseForEventAccess(caseId, req);
 
+  // Keep the existing case link when case_id is omitted.
+  // An explicit empty/null case_id means a general calendar event.
+  const rawCaseId =
+    body.case_id !== undefined ? body.case_id : existingEvent?.case_id;
+
+  const caseId = normalizeText(rawCaseId ?? '');
+  const loadedCase = caseId
+    ? await loadCaseForEventAccess(caseId, req)
+    : null;
+
+  // Preserve the existing rule that lawyers cannot create or modify events.
   if (currentUser.role === 'lawyer') {
-    const error = new Error('Lawyers can view scheduled events but cannot change them');
+    const error = new Error(
+      'Lawyers can view scheduled events but cannot change them'
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  // Preserve the existing creation roles for general events.
+  if (!loadedCase && !['admin', 'law_student'].includes(currentUser.role)) {
+    const error = new Error('Access denied');
     error.statusCode = 403;
     throw error;
   }
 
   const title = normalizeText(body.title ?? existingEvent?.title);
+
   const eventType = normalizeText(
     body.event_type ?? existingEvent?.event_type ?? 'other'
   );
+
   const date = normalizeText(body.date ?? existingEvent?.date);
-  const startTime = normalizeText(body.start_time ?? existingEvent?.start_time);
+  const startTime = normalizeText(
+    body.start_time ?? existingEvent?.start_time
+  );
   const endTime = normalizeText(body.end_time ?? existingEvent?.end_time);
-  const status = normalizeText(body.status ?? existingEvent?.status ?? 'upcoming');
+
+  const status = normalizeText(
+    body.status ?? existingEvent?.status ?? 'upcoming'
+  );
+
   const reminderMinutes =
-    body.reminder_minutes_before ?? existingEvent?.reminder_minutes_before ?? 1440;
+    body.reminder_minutes_before ??
+    existingEvent?.reminder_minutes_before ??
+    1440;
 
   if (!title) {
     const error = new Error('title is required');
@@ -216,7 +290,9 @@ const validateEventPayload = async (body, req, existingEvent = null) => {
   }
 
   if (!TIME_PATTERN.test(startTime) || !TIME_PATTERN.test(endTime)) {
-    const error = new Error('start_time and end_time must be in HH:mm format');
+    const error = new Error(
+      'start_time and end_time must be in HH:mm format'
+    );
     error.statusCode = 400;
     throw error;
   }
@@ -236,7 +312,9 @@ const validateEventPayload = async (body, req, existingEvent = null) => {
   const parsedReminder = Number(reminderMinutes);
 
   if (!Number.isInteger(parsedReminder) || parsedReminder < 0) {
-    const error = new Error('reminder_minutes_before must be a non-negative integer');
+    const error = new Error(
+      'reminder_minutes_before must be a non-negative integer'
+    );
     error.statusCode = 400;
     throw error;
   }
@@ -246,33 +324,49 @@ const validateEventPayload = async (body, req, existingEvent = null) => {
       ? normalizeStringArray(body.assigned_users)
       : normalizeStringArray(existingEvent?.assigned_users);
 
-  if (currentUser.role === 'law_student') {
+  if (currentUser.role === 'law_student' && loadedCase) {
     const invalidUsers = assignedUsers.filter(
       (userId) => !loadedCase.assignedUserIds.includes(userId)
     );
 
     if (invalidUsers.length) {
-      const error = new Error('Students can only assign case events to assigned case users');
+      const error = new Error(
+        'Students can only assign case events to assigned case users'
+      );
       error.statusCode = 403;
       throw error;
     }
   }
 
-  const fallbackAssignedUsers =
-    loadedCase.assignedUserIds.length > 0 ? loadedCase.assignedUserIds : [actorId];
+  const fallbackAssignedUsers = loadedCase
+    ? loadedCase.assignedUserIds.length > 0
+      ? loadedCase.assignedUserIds
+      : [actorId]
+    : [actorId];
 
   return {
     title,
     event_type: eventType,
-    case_id: loadedCase.id,
-    case_title: getCaseTitle(loadedCase.data, body.case_title ?? existingEvent?.case_title),
+    case_id: loadedCase?.id || null,
+    case_title: loadedCase
+      ? getCaseTitle(
+          loadedCase.data,
+          body.case_title ?? existingEvent?.case_title
+        )
+      : null,
     date,
     start_time: startTime,
     end_time: endTime,
-    location: normalizeOptionalText(body.location ?? existingEvent?.location),
-    description: normalizeOptionalText(body.description ?? existingEvent?.description),
+    location: normalizeOptionalText(
+      body.location ?? existingEvent?.location
+    ),
+    description: normalizeOptionalText(
+      body.description ?? existingEvent?.description
+    ),
     reminder_minutes_before: parsedReminder,
-    assigned_users: assignedUsers.length ? assignedUsers : fallbackAssignedUsers,
+    assigned_users: assignedUsers.length
+      ? assignedUsers
+      : fallbackAssignedUsers,
     status,
   };
 };
@@ -285,9 +379,18 @@ const eventMatchesQuery = (event, query) => {
   const dateFrom = normalizeText(query.date_from || query.from);
   const dateTo = normalizeText(query.date_to || query.to);
 
-  if (eventType && eventType !== 'all' && event.event_type !== eventType) return false;
-  if (caseId && caseId !== 'all' && event.case_id !== caseId) return false;
-  if (status && status !== 'all' && event.status !== status) return false;
+  if (eventType && eventType !== 'all' && event.event_type !== eventType) {
+    return false;
+  }
+
+  if (caseId && caseId !== 'all' && event.case_id !== caseId) {
+    return false;
+  }
+
+  if (status && status !== 'all' && event.status !== status) {
+    return false;
+  }
+
   if (date && event.date !== date) return false;
   if (dateFrom && event.date < dateFrom) return false;
   if (dateTo && event.date > dateTo) return false;
@@ -298,7 +401,9 @@ const eventMatchesQuery = (event, query) => {
 const sortEvents = (events) =>
   [...events].sort((a, b) => {
     const dateCompare = (a.date || '').localeCompare(b.date || '');
+
     if (dateCompare !== 0) return dateCompare;
+
     return (a.start_time || '').localeCompare(b.start_time || '');
   });
 
@@ -375,6 +480,7 @@ router.post('/events', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating event:', error);
+
     return res.status(error.statusCode || 500).json({
       error: error.message || 'Failed to create event',
     });
@@ -395,37 +501,42 @@ router.get('/events', requireAuth, async (req, res) => {
     if (currentUser.role === 'admin') {
       const snapshot = await db.collection('events').get();
       events = snapshot.docs.map(serializeEventDoc);
-    } else if (currentUser.role === 'law_student' || currentUser.role === 'lawyer') {
+    } else if (
+      currentUser.role === 'law_student' ||
+      currentUser.role === 'lawyer'
+    ) {
       const caseIds =
         currentUser.role === 'law_student'
           ? await getVisibleCaseIdsForStudent(actorId)
           : await getDirectCaseIdsForUser(actorId);
 
-      if (!caseIds.length) {
-        return res.status(200).json([]);
-      }
-
-      const caseDocs = await Promise.all(
-        caseIds.map((caseId) => db.collection('cases').doc(caseId).get())
-      );
+      const caseDocs = caseIds.length
+        ? await Promise.all(
+            caseIds.map((caseId) => db.collection('cases').doc(caseId).get())
+          )
+        : [];
 
       const visibleCaseIds = caseDocs
         .filter((caseDoc) => caseDoc.exists && !isCaseDeleted(caseDoc.data()))
         .map((caseDoc) => caseDoc.id);
 
-      if (!visibleCaseIds.length) {
-        return res.status(200).json([]);
-      }
+      const [eventSnapshots, generalEventsSnapshot] = await Promise.all([
+        Promise.all(
+          visibleCaseIds.map((caseId) =>
+            db.collection('events').where('case_id', '==', caseId).get()
+          )
+        ),
+        db.collection('events').where('case_id', '==', null).get(),
+      ]);
 
-      const eventSnapshots = await Promise.all(
-        visibleCaseIds.map((caseId) =>
-          db.collection('events').where('case_id', '==', caseId).get()
-        )
-      );
-
-      events = eventSnapshots.flatMap((snapshot) =>
-        snapshot.docs.map(serializeEventDoc)
-      );
+      events = [
+        ...eventSnapshots.flatMap((snapshot) =>
+          snapshot.docs.map(serializeEventDoc)
+        ),
+        ...generalEventsSnapshot.docs
+          .map(serializeEventDoc)
+          .filter((event) => canViewGeneralEvent(event, req)),
+      ];
     } else {
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -438,7 +549,10 @@ router.get('/events', requireAuth, async (req, res) => {
     return res.status(200).json(filteredEvents);
   } catch (error) {
     console.error('Error fetching events:', error);
-    return res.status(500).json({ error: error.message || 'Failed to fetch events' });
+
+    return res.status(500).json({
+      error: error.message || 'Failed to fetch events',
+    });
   }
 });
 
@@ -457,6 +571,7 @@ router.get('/events/:eventId', requireAuth, async (req, res) => {
     return res.status(200).json(event);
   } catch (error) {
     console.error('Error fetching event:', error);
+
     return res.status(error.statusCode || 500).json({
       error: error.message || 'Failed to fetch event',
     });
@@ -482,6 +597,7 @@ router.get('/cases/:caseId/events', requireAuth, async (req, res) => {
     return res.status(200).json(applyLimit(sortEvents(events), req.query));
   } catch (error) {
     console.error('Error fetching case events:', error);
+
     return res.status(error.statusCode || 500).json({
       error: error.message || 'Failed to fetch case events',
     });
@@ -505,8 +621,16 @@ router.patch('/events/:eventId', requireAuth, async (req, res) => {
 
     const existingEvent = eventDoc.data();
     await assertVisibleEvent(existingEvent, req);
+    assertGeneralEventManagement(existingEvent, req);
 
-    const updates = await validateEventPayload(req.body || {}, req, existingEvent);
+    const updates = await validateEventPayload(
+      req.body || {},
+      req,
+      existingEvent
+    );
+
+    // Check the resulting event too, including when a case link is removed.
+    assertGeneralEventManagement({ ...existingEvent, ...updates }, req);
 
     await eventRef.update({
       ...updates,
@@ -533,6 +657,7 @@ router.patch('/events/:eventId', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating event:', error);
+
     return res.status(error.statusCode || 500).json({
       error: error.message || 'Failed to update event',
     });
@@ -561,6 +686,7 @@ router.delete('/events/:eventId', requireAuth, async (req, res) => {
     };
 
     await assertVisibleEvent(existingEvent, req);
+    assertGeneralEventManagement(existingEvent, req);
 
     if (req.currentUser.role === 'lawyer') {
       return res.status(403).json({
@@ -570,7 +696,9 @@ router.delete('/events/:eventId', requireAuth, async (req, res) => {
 
     if (hardDelete) {
       if (req.currentUser.role !== 'admin') {
-        return res.status(403).json({ error: 'Only admins can permanently delete events' });
+        return res.status(403).json({
+          error: 'Only admins can permanently delete events',
+        });
       }
 
       await eventRef.delete();
@@ -600,6 +728,7 @@ router.delete('/events/:eventId', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error deleting event:', error);
+
     return res.status(error.statusCode || 500).json({
       error: error.message || 'Failed to delete event',
     });

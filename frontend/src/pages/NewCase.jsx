@@ -1,13 +1,38 @@
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { api } from '../api/apiClient';
 
 const caseTypeOptions = [
-  { value: 'criminal', label: 'Criminal' },
-  { value: 'civil', label: 'Civil' },
-  { value: 'family', label: 'Family' },
-  { value: 'property', label: 'Property' },
+  {
+    value: 'Pretrial Detainee Representation',
+    label: 'Pretrial Detainee Representation',
+  },
+  {
+    value: 'Bail Applications',
+    label: 'Bail Applications',
+  },
+  {
+    value: 'Minor Criminal Defense',
+    label: 'Minor Criminal Defense',
+  },
+  {
+    value: 'Alternative Dispute Resolution',
+    label: 'Alternative Dispute Resolution',
+  },
+  {
+    value: 'Restorative Justice Programs',
+    label: 'Restorative Justice Programs',
+  },
+  {
+    value: 'Business Formation & Structuring',
+    label: 'Business Formation & Structuring',
+  },
+  {
+    value: 'Commercial Contract Drafting',
+    label: 'Commercial Contract Drafting',
+  },
 ];
 
 export default function NewCase() {
@@ -15,20 +40,36 @@ export default function NewCase() {
 
   const [formData, setFormData] = useState({
     client_name: '',
-    case_type: 'criminal',
+    case_type: 'Pretrial Detainee Representation',
     offence: '',
     description: '',
   });
-  
-//loading state for when the case is being created to prevent multiple submissions and show feedback
+
+  const [otherCaseType, setOtherCaseType] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const selectedCaseType =
+      formData.case_type === 'other'
+        ? otherCaseType.trim()
+        : formData.case_type;
+
+    if (!selectedCaseType) {
+      alert('Please select or specify a case type.');
+      return;
+    }
+
     try {
       setIsCreating(true);
-      const result = await api.createCase(formData);
+
+      const payload = {
+        ...formData,
+        case_type: selectedCaseType,
+      };
+
+      const result = await api.createCase(payload);
 
       alert(result.message || 'Case created successfully');
 
@@ -37,6 +78,7 @@ export default function NewCase() {
 
         try {
           const visibleCases = await api.getVisibleCases();
+
           const createdCase = visibleCases.find(
             (caseItem) => caseItem.id === result.caseId
           );
@@ -67,10 +109,14 @@ export default function NewCase() {
         <div className="new-case-field-stack">
           <label className="new-case-field">
             <span className="new-case-field-label">Case Type</span>
+
             <select
               value={formData.case_type}
               onChange={(e) =>
-                setFormData({ ...formData, case_type: e.target.value })
+                setFormData({
+                  ...formData,
+                  case_type: e.target.value,
+                })
               }
               className="new-case-select"
               required
@@ -80,16 +126,40 @@ export default function NewCase() {
                   {option.label}
                 </option>
               ))}
+
+              <option value="other">Other (please specify)</option>
             </select>
           </label>
 
+          {formData.case_type === 'other' && (
+            <label className="new-case-field">
+              <span className="new-case-field-label">
+                Specify Case Type
+              </span>
+
+              <input
+                type="text"
+                value={otherCaseType}
+                onChange={(e) => setOtherCaseType(e.target.value)}
+                className="new-case-input"
+                placeholder="Enter the type of case"
+                required
+                maxLength={150}
+              />
+            </label>
+          )}
+
           <label className="new-case-field">
             <span className="new-case-field-label">Client Name</span>
+
             <input
               type="text"
               value={formData.client_name}
               onChange={(e) =>
-                setFormData({ ...formData, client_name: e.target.value })
+                setFormData({
+                  ...formData,
+                  client_name: e.target.value,
+                })
               }
               className="new-case-input"
               placeholder="e.g. Sumaya Ahmed"
@@ -98,25 +168,35 @@ export default function NewCase() {
           </label>
 
           <label className="new-case-field">
-            <span className="new-case-field-label">Offence / Matter</span>
+            <span className="new-case-field-label">
+              Offence / Matter
+            </span>
+
             <input
               type="text"
               value={formData.offence}
               onChange={(e) =>
-                setFormData({ ...formData, offence: e.target.value })
+                setFormData({
+                  ...formData,
+                  offence: e.target.value,
+                })
               }
               className="new-case-input"
-              placeholder="e.g. Bail application, custody dispute, land disagreement"
+              placeholder="Describe the specific offence or matter"
               required
             />
           </label>
 
           <label className="new-case-field">
             <span className="new-case-field-label">Description</span>
+
             <textarea
               value={formData.description}
               onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
+                setFormData({
+                  ...formData,
+                  description: e.target.value,
+                })
               }
               rows={6}
               className="new-case-textarea"
@@ -134,6 +214,7 @@ export default function NewCase() {
             {isCreating ? (
               <Loader2 size={18} className="student-loader-icon" />
             ) : null}
+
             {isCreating ? 'Creating...' : 'Create Case'}
           </button>
         </div>

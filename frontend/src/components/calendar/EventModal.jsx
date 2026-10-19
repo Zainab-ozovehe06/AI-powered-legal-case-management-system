@@ -5,12 +5,13 @@ import {
   EVENT_TYPE_OPTIONS,
   REMINDER_OPTIONS,
   STATUS_OPTIONS,
+  getEventTypeMeta,
   getTodayDateString,
 } from './eventUtils';
 
 const buildInitialForm = ({ event, defaultDate, lockedCaseId }) => ({
   title: event?.title || '',
-  event_type: event?.event_type || 'court_date',
+  event_type: event?.event_type || EVENT_TYPE_OPTIONS[0].value,
   case_id: lockedCaseId || event?.case_id || '',
   date: event?.date || defaultDate || getTodayDateString(),
   start_time: event?.start_time || '09:00',
@@ -28,6 +29,7 @@ export default function EventModal({
   defaultDate,
   lockedCaseId,
   lockedCaseTitle,
+  readOnly = false,
   isSubmitting = false,
   isDeleting = false,
   onClose,
@@ -60,9 +62,11 @@ export default function EventModal({
 
   const handleSubmit = (submitEvent) => {
     submitEvent.preventDefault();
+    if (readOnly) return;
 
     onSubmit({
       ...form,
+      case_id: form.case_id || null,
       reminder_minutes_before: Number(form.reminder_minutes_before),
     });
   };
@@ -74,7 +78,7 @@ export default function EventModal({
           <div>
             <p className="event-modal-eyebrow">Schedule</p>
             <h2 className="event-modal-title">
-              {event ? 'Edit Event' : 'Create Event'}
+              {event ? (readOnly ? 'Event Details' : 'Edit Event') : 'Create Event'}
             </h2>
           </div>
           <button
@@ -93,6 +97,7 @@ export default function EventModal({
             <input
               type="text"
               value={form.title}
+              disabled={readOnly}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               className="event-form-input"
               required
@@ -103,10 +108,17 @@ export default function EventModal({
             <span className="event-form-label">Event Type</span>
             <select
               value={form.event_type}
+              disabled={readOnly}
               onChange={(e) => setForm({ ...form, event_type: e.target.value })}
               className="event-form-input"
               required
             >
+              {event?.event_type &&
+              !EVENT_TYPE_OPTIONS.some((option) => option.value === event.event_type) ? (
+                <option value={event.event_type}>
+                  {getEventTypeMeta(event.event_type).label}
+                </option>
+              ) : null}
               {EVENT_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -116,15 +128,15 @@ export default function EventModal({
           </label>
 
           <label className="event-form-field">
-            <span className="event-form-label">Related Case</span>
+            <span className="event-form-label">Related Case (Optional)</span>
             <select
               value={form.case_id}
               onChange={(e) => setForm({ ...form, case_id: e.target.value })}
               className="event-form-input"
-              required
-              disabled={Boolean(lockedCaseId)}
+              required={Boolean(lockedCaseId)}
+              disabled={readOnly || Boolean(lockedCaseId)}
             >
-              <option value="">Select a case</option>
+              <option value="">No case - general event</option>
               {caseOptions.map((caseItem) => (
                 <option key={caseItem.id} value={caseItem.id}>
                   {caseItem.caseDisplayId ? `Case ${caseItem.caseDisplayId} - ` : ''}
@@ -140,6 +152,7 @@ export default function EventModal({
             <input
               type="date"
               value={form.date}
+              disabled={readOnly}
               onChange={(e) => setForm({ ...form, date: e.target.value })}
               className="event-form-input"
               required
@@ -152,6 +165,7 @@ export default function EventModal({
               <input
                 type="time"
                 value={form.start_time}
+                disabled={readOnly}
                 onChange={(e) => setForm({ ...form, start_time: e.target.value })}
                 className="event-form-input"
                 required
@@ -163,6 +177,7 @@ export default function EventModal({
               <input
                 type="time"
                 value={form.end_time}
+                disabled={readOnly}
                 onChange={(e) => setForm({ ...form, end_time: e.target.value })}
                 className="event-form-input"
                 required
@@ -174,6 +189,7 @@ export default function EventModal({
             <span className="event-form-label">Reminder</span>
             <select
               value={form.reminder_minutes_before}
+              disabled={readOnly}
               onChange={(e) =>
                 setForm({ ...form, reminder_minutes_before: e.target.value })
               }
@@ -191,6 +207,7 @@ export default function EventModal({
             <span className="event-form-label">Status</span>
             <select
               value={form.status}
+              disabled={readOnly}
               onChange={(e) => setForm({ ...form, status: e.target.value })}
               className="event-form-input"
             >
@@ -207,6 +224,7 @@ export default function EventModal({
             <input
               type="text"
               value={form.location}
+              disabled={readOnly}
               onChange={(e) => setForm({ ...form, location: e.target.value })}
               className="event-form-input"
             />
@@ -216,6 +234,7 @@ export default function EventModal({
             <span className="event-form-label">Description</span>
             <textarea
               value={form.description}
+              disabled={readOnly}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               rows={4}
               className="event-form-textarea"
@@ -223,7 +242,7 @@ export default function EventModal({
           </label>
 
           <div className="event-modal-actions">
-            {event && onDelete ? (
+            {event && onDelete && !readOnly ? (
               <button
                 type="button"
                 onClick={() => onDelete(event)}
@@ -248,18 +267,20 @@ export default function EventModal({
               >
                 Close
               </button>
-              <button
-                type="submit"
-                disabled={isSubmitting || isDeleting}
-                className="event-primary-button"
-              >
-                {isSubmitting ? (
-                  <Loader2 size={16} className="student-loader-icon" />
-                ) : (
-                  <Save size={16} />
-                )}
-                {isSubmitting ? 'Saving...' : 'Save Event'}
-              </button>
+              {!readOnly ? (
+                <button
+                  type="submit"
+                  disabled={isSubmitting || isDeleting}
+                  className="event-primary-button"
+                >
+                  {isSubmitting ? (
+                    <Loader2 size={16} className="student-loader-icon" />
+                  ) : (
+                    <Save size={16} />
+                  )}
+                  {isSubmitting ? 'Saving...' : 'Save Event'}
+                </button>
+              ) : null}
             </div>
           </div>
         </form>

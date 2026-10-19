@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
-  CalendarDays,
   Clock3,
   FolderOpen,
   Loader2,
@@ -69,9 +68,7 @@ export default function StudentDashboard() {
           (c) => normalizeCaseStatus(c.status) === 'incourt'
         ).length;
 
-        const upcomingHearings = visibleEvents.filter(
-          (event) => event.event_type === 'court_date'
-        ).length;
+        const upcomingHearings = visibleEvents.length;
 
         setCases(sortedCases);
         setUpcomingEvents(visibleEvents);
@@ -99,10 +96,10 @@ export default function StudentDashboard() {
       iconClassName: 'student-stat-icon-primary',
     },
     {
-      label: 'Upcoming Hearings',
+      label: 'Reminders',
       value: stats.upcomingHearings,
-      icon: CalendarDays,
-      iconClassName: 'student-stat-icon-warning',
+      icon: AlertTriangle,
+      iconClassName: 'student-stat-icon-alert',
     },
     {
       label: 'Pending Actions',

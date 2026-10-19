@@ -9,10 +9,12 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { api } from '../../api/apiClient';
+import { useAuth } from '../../context/AuthContext';
 import EventCard from './EventCard';
 import EventModal from './EventModal';
 import {
   EVENT_TYPE_OPTIONS,
+  LEGACY_EVENT_TYPE_OPTIONS,
   STATUS_OPTIONS,
   buildCalendarCells,
   formatEventTimeRange,
@@ -47,6 +49,7 @@ const getEventQuery = (filters) => {
 };
 
 export default function Calendar() {
+  const { currentUser, userRole } = useAuth();
   const [cases, setCases] = useState([]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +70,12 @@ export default function Calendar() {
   const [selectedDate, setSelectedDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const isGeneralEventReadOnly = Boolean(
+    selectedEvent &&
+      !selectedEvent.case_id &&
+      userRole !== 'admin' &&
+      !(userRole === 'law_student' && selectedEvent.created_by === currentUser?.uid)
+  );
 
   const fetchCalendarData = useCallback(async () => {
     setLoading(true);
@@ -233,7 +242,7 @@ export default function Calendar() {
               onChange={(e) => setFilters({ ...filters, event_type: e.target.value })}
             >
               <option value="all">All types</option>
-              {EVENT_TYPE_OPTIONS.map((option) => (
+              {[...EVENT_TYPE_OPTIONS, ...LEGACY_EVENT_TYPE_OPTIONS].map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -460,6 +469,7 @@ export default function Calendar() {
         <EventModal
           isOpen={isModalOpen}
           event={selectedEvent}
+          readOnly={isGeneralEventReadOnly}
           cases={cases}
           defaultDate={selectedDate}
           isSubmitting={isSubmitting}

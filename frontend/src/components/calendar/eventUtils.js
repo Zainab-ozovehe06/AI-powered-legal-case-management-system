@@ -1,4 +1,23 @@
 export const EVENT_TYPE_OPTIONS = [
+  { value: 'summit', label: 'Summit' },
+  { value: 'conference', label: 'Conference' },
+  { value: 'street_lawyering', label: 'Street Lawyering' },
+  {
+    value: 'reform_pre_trial_detention',
+    label: 'Reform Pre Trial Detention',
+  },
+  { value: 'community_outreach', label: 'Community Outreach' },
+  { value: 'workshop', label: 'Workshop' },
+  { value: 'training', label: 'Training' },
+  { value: 'orientation', label: 'Orientation' },
+  { value: 'competitions', label: 'Competitions' },
+  { value: 'virtual_events', label: 'Virtual Events' },
+  { value: 'seminars_webinars', label: 'Seminars and Webinars' },
+  { value: 'law_clinic_meetings', label: 'Law Clinic Meetings' },
+  { value: 'unit_meetings', label: 'Unit meetings' },
+];
+
+export const LEGACY_EVENT_TYPE_OPTIONS = [
   { value: 'court_date', label: 'Court Date' },
   { value: 'client_interview', label: 'Client Interview' },
   { value: 'clinic_meeting', label: 'Clinic Meeting' },
@@ -92,13 +111,22 @@ export const getReminderLabel = (minutes) => {
 };
 
 export const getEventTypeMeta = (eventType) => {
-  const option =
-    EVENT_TYPE_OPTIONS.find((item) => item.value === eventType) ||
-    EVENT_TYPE_OPTIONS[EVENT_TYPE_OPTIONS.length - 1];
+  const option = [...EVENT_TYPE_OPTIONS, ...LEGACY_EVENT_TYPE_OPTIONS].find(
+    (item) => item.value === eventType
+  );
+
+  const fallback = option || {
+    value: eventType || 'other',
+    label: eventType
+      ? eventType.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+      : 'Other',
+  };
 
   return {
-    ...option,
-    className: `event-type-${option.value}`,
+    ...fallback,
+    className: EVENT_TYPE_OPTIONS.some((item) => item.value === fallback.value)
+      ? `event-type-${fallback.value} event-type-other`
+      : `event-type-${fallback.value}`,
   };
 };
 
