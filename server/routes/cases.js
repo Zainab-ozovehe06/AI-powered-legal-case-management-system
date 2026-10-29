@@ -100,6 +100,15 @@ const getCaseEditableFields = (body) => {
   return updates;
 };
 
+// Scope the existing case listing to explicit group assignments, after applying
+// the caller's existing case permissions. Membership alone adds no new access.
+const filterUnitCases = async (cases, groupId) => {
+  if (!groupId) return cases;
+  const assignments = await db.collection('case_assignments').where('group_id', '==', groupId).get();
+  const ids = new Set(assignments.docs.filter((doc) => doc.data().assigned_to_type === ASSIGNMENT_TYPE.GROUP).map((doc) => doc.data().case_id));
+  return cases.filter((item) => ids.has(item.id));
+};
+
 // GET all visible cases
 router.get('/', requireAuth, async (req, res) => {
   try {
@@ -126,7 +135,7 @@ router.get('/', requireAuth, async (req, res) => {
         }))
         .filter((caseItem) => !isCaseDeleted(caseItem));
 
-      return res.status(200).json(cases);
+      return res.status(200).json(await filterUnitCases(cases, normalizeText(req.query.group_id)));
     }
 
     // Law student sees cases they created, direct assignments, and group assignments.
@@ -134,7 +143,7 @@ router.get('/', requireAuth, async (req, res) => {
       const caseIds = await getVisibleCaseIdsForStudent(actorId);
       const cases = await getCasesByIds(caseIds);
 
-      return res.status(200).json(cases);
+      return res.status(200).json(await filterUnitCases(cases, normalizeText(req.query.group_id)));
     }
 
     // Lawyers see cases directly assigned to them by an admin.
@@ -142,7 +151,7 @@ router.get('/', requireAuth, async (req, res) => {
       const caseIds = await getDirectCaseIdsForUser(actorId);
       const cases = await getCasesByIds(caseIds);
 
-      return res.status(200).json(cases);
+      return res.status(200).json(await filterUnitCases(cases, normalizeText(req.query.group_id)));
     }
 
     return res.status(403).json({ error: 'Access denied' });
@@ -571,6 +580,7 @@ router.post(
         title,
         content,
         status: 'submitted',
+        visibility: 'restricted',
         role: 'supervisor',
         supervisor_id: null,
         submitted_at: now,

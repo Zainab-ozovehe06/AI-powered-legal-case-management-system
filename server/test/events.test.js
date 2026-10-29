@@ -1,109 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import vm from 'node:vm';
-import express from 'express';
 import {
   EVENT_TYPE_OPTIONS,
   LEGACY_EVENT_TYPE_OPTIONS,
   getEventTypeMeta,
 } from '../../frontend/src/components/calendar/eventUtils.js';
 
-// Load the actual router and case-access helpers with in-memory Firestore.
-// Authentication is bypassed here: each request supplies its test user explicitly.
-// No Firebase credentials, network calls, or stored records are used.
-const createHarness = async () => {
-  const tables = new Map();
-  const reads = [];
-  let nextId = 0;
-  const table = (name) => {
-    if (!tables.has(name)) tables.set(name, new Map());
-    return tables.get(name);
-  };
-  const snapshot = (name, id) => ({
-    id,
-    exists: table(name).has(id),
-    data: () => structuredClone(table(name).get(id)),
-  });
-  const query = (name, filters = []) => ({
-    where(field, operator, value) {
-      assert.equal(operator, '==');
-      return query(name, [...filters, [field, value]]);
-    },
-    async get() {
-      reads.push(name);
-      return {
-        docs: [...table(name).keys()]
-          .filter((id) => filters.every(([field, value]) => table(name).get(id)[field] === value))
-          .map((id) => snapshot(name, id)),
-      };
-    },
-    doc(id = `test-${++nextId}`) {
-      return {
-        id,
-        async get() { reads.push(name); return snapshot(name, id); },
-        async set(data) { table(name).set(id, structuredClone(data)); },
-        async update(data) {
-          assert.ok(table(name).has(id));
-          table(name).set(id, { ...table(name).get(id), ...structuredClone(data) });
-        },
-        async delete() { table(name).delete(id); },
-      };
-    },
-    async add(data) {
-      const ref = this.doc();
-      await ref.set(data);
-      return ref;
-    },
-  });
-  const synthetic = (exports) => new vm.SyntheticModule(Object.keys(exports), function () {
-    Object.entries(exports).forEach(([name, value]) => this.setExport(name, value));
-  });
-  const firebase = synthetic({
-    db: { collection: (name) => query(name) },
-    admin: { firestore: { FieldValue: { serverTimestamp: () => 'test-timestamp' } } },
-  });
-  const expressModule = synthetic({ default: express });
-  const authModule = synthetic({ requireAuth: (_req, _res, next) => next() });
-  const helpers = new vm.SourceTextModule(await readFile(new URL('../utils/groupCollaboration.js', import.meta.url), 'utf8'));
-  const routerModule = new vm.SourceTextModule(await readFile(new URL('../routes/events.js', import.meta.url), 'utf8'));
-  const imports = {
-    express: expressModule,
-    '../config/firebase.js': firebase,
-    '../middleware/authenticate.js': authModule,
-    '../utils/groupCollaboration.js': helpers,
-  };
-  await routerModule.link((specifier) => {
-    assert.ok(imports[specifier], `Unexpected import: ${specifier}`);
-    return imports[specifier];
-  });
-  await routerModule.evaluate();
-  const router = routerModule.namespace.default;
-
-  return {
-    table,
-    reads,
-    async request(method, path, { role = 'admin', uid = 'admin-1', body = {}, params = {}, query = {} } = {}) {
-      const route = router.stack.find((layer) => layer.route?.path === path && layer.route.methods[method]);
-      assert.ok(route, `${method} ${path} must exist`);
-      const req = { currentUser: { role, uid }, body, params, query };
-      const res = {
-        statusCode: 200,
-        status(code) { this.statusCode = code; return this; },
-        json(data) { this.body = JSON.parse(JSON.stringify(data)); return this; },
-      };
-      // Capture expected route errors without polluting test output.
-      const originalError = console.error;
-      console.error = () => {};
-      try {
-        await route.route.stack.at(-1).handle(req, res);
-      } finally {
-        console.error = originalError;
-      }
-      return { status: res.statusCode, body: res.body };
-    },
-  };
-};
+import { createHarness } from '../testSupport/routerHarness.js';
 
 const payload = (overrides = {}) => ({
   title: 'Clinic event', event_type: 'summit', case_id: null,
@@ -281,7 +184,7 @@ test('general events are visible only to admins, their creator and assigned user
   ]) {
     const user = { role, uid };
     const listed = await h.request('get', '/events', user);
-    assert.equal(listed.status, role === 'supervisor' ? 403 : 200);
+    assert.equal(listed.status, 200);
     if (listed.status === 200) assert.equal(listed.body.length, visible ? 1 : 0);
     assert.equal((await h.request('get', '/events/:eventId', { ...user, params })).status, visible ? 200 : 403);
   }
@@ -323,4 +226,73 @@ test('students cannot remove the case link from another creator\'s event to bypa
   assert.equal((await h.request('patch', '/events/:eventId', { ...student, body: { case_id: null } })).status, 200);
   assert.equal(h.table('events').get('linked').case_id, null);
   assert.equal(h.table('activities').size, 0);
+});
+
+const seedUnits = (h) => {
+  h.table('groups').set('unit-1', { name: 'Rights', supervisor_id: 'supervisor-1', status: 'active' });
+  h.table('groups').set('unit-2', { name: 'Migration', supervisor_id: 'supervisor-2', status: 'active' });
+  h.table('group_members').set('unit-1_student-1', { group_id: 'unit-1', user_id: 'student-1' });
+};
+
+test('unit event audiences use live memberships and supervisor assignments in lists and details', async () => {
+  const h = await createHarness(); seedUnits(h);
+  const student = { role: 'law_student', uid: 'student-1' };
+  const created = await h.request('post', '/events', { ...student, body: payload({ group_id: 'unit-1', visibility: 'unit' }) });
+  assert.equal(created.status, 201); assert.equal(created.body.event.case_id, null);
+  const params = { eventId: created.body.eventId };
+  for (const [role, uid, allowed] of [['law_student', 'student-1', true], ['supervisor', 'supervisor-1', true],
+    ['supervisor', 'supervisor-2', false], ['law_student', 'outsider', false], ['lawyer', 'student-1', false]]) {
+    const user = { role, uid };
+    assert.equal((await h.request('get', '/events', user)).body.length, allowed ? 1 : 0);
+    assert.equal((await h.request('get', '/events/:eventId', { ...user, params })).status, allowed ? 200 : 403);
+  }
+  const supervisor = { role: 'supervisor', uid: 'supervisor-1' };
+  assert.equal((await h.request('patch', '/events/:eventId', { ...supervisor, params, body: { title: 'Supervisor update' } })).status, 200);
+  assert.equal((await h.request('post', '/events', { ...student, body: payload({ group_id: 'unit-2', visibility: 'unit' }) })).status, 403);
+  assert.equal((await h.request('post', '/events', { ...supervisor, body: payload({ group_id: 'unit-1', visibility: 'unit' }) })).status, 201);
+  h.table('group_members').delete('unit-1_student-1');
+  assert.equal((await h.request('get', '/events', student)).body.length, 0);
+  assert.equal((await h.request('get', '/events/:eventId', { ...student, params })).status, 403);
+  assert.equal((await h.request('delete', '/events/:eventId', { ...student, params })).status, 403);
+});
+
+test('clinic-wide events require admin publication; private events retain their existing audience', async () => {
+  const h = await createHarness(); seedUnits(h);
+  assert.equal((await h.request('post', '/events', { role: 'law_student', uid: 'student-1', body: payload({ visibility: 'clinic' }) })).status, 403);
+  assert.equal((await h.request('post', '/events', { role: 'supervisor', uid: 'supervisor-1', body: payload({ visibility: 'clinic' }) })).status, 403);
+  assert.equal((await h.request('post', '/events', { body: payload({ visibility: 'clinic' }) })).status, 201);
+  assert.equal((await h.request('post', '/events', { body: payload() })).status, 201);
+  for (const role of ['law_student', 'lawyer', 'supervisor']) {
+    const result = await h.request('get', '/events', { role, uid: 'outsider' });
+    assert.equal(result.status, 200); assert.equal(result.body.length, 1); assert.equal(result.body[0].visibility, 'clinic');
+    assert.equal((await h.request('delete', '/events/:eventId', { role, uid: 'outsider', params: { eventId: result.body[0].id } })).status, 403);
+  }
+});
+
+test('unit calendar includes existing assigned-case events without exposing unassigned case data', async () => {
+  const h = await createHarness(); seedUnits(h); seedCases(h);
+  h.table('case_assignments').set('unit-case', { case_id: 'case-1', group_id: 'unit-1', assigned_to_type: 'group' });
+  h.table('events').set('legacy-case', payload({ case_id: 'case-1' }));
+  h.table('events').set('other-case', payload({ case_id: 'case-2', group_id: 'unit-1' }));
+  h.table('events').set('unit', payload({ group_id: 'unit-1', visibility: 'unit' }));
+  h.table('events').set('clinic', payload({ visibility: 'clinic' }));
+  const student = { role: 'law_student', uid: 'student-1', query: { group_id: 'unit-1' } };
+  const listed = await h.request('get', '/events', student);
+  assert.equal(listed.status, 200); assert.deepEqual(listed.body.map((item) => item.id), ['legacy-case', 'unit']);
+  assert.equal((await h.request('get', '/events', { ...student, uid: 'outsider' })).status, 403);
+  assert.equal((await h.request('get', '/events', { ...student, role: 'supervisor', uid: 'supervisor-1' })).body.length, 1);
+});
+
+test('event categories, real dates, multi-day end dates and unit-case relationships are validated', async () => {
+  const h = await createHarness(); seedUnits(h); seedCases(h);
+  for (const change of [{ category: 'case' }, { date: '2026-02-30' }, { end_date: '2026-10-19' },
+    { group_id: 'unit-1', visibility: 'private' }, { visibility: 'unit' }, { visibility: 'everyone' },
+    { case_id: 'case-1', group_id: 'unit-1' }]) {
+    assert.equal((await h.request('post', '/events', { body: payload(change) })).status, 400);
+  }
+  const multi = await h.request('post', '/events', { body: payload({ end_date: '2026-10-21', end_time: '08:00' }) });
+  assert.equal(multi.status, 201); assert.equal(multi.body.event.end_date, '2026-10-21');
+  const sameDay = await h.request('post', '/events', { body: payload() });
+  const moved = await h.request('patch', '/events/:eventId', { params: { eventId: sameDay.body.eventId }, body: { date: '2026-11-02' } });
+  assert.equal(moved.status, 200); assert.equal(moved.body.event.end_date, '2026-11-02');
 });

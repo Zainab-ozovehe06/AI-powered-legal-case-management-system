@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   FolderOpen,
@@ -11,11 +11,16 @@ import {
   UserCheck,
   Settings,
   LogOut,
+  Library,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useUnits } from '../../context/UnitsContext';
+import { UnitNavigation } from '../workspace/WorkspaceLayout';
 
 export const Sidebar = ({ collapsed, setCollapsed }) => {
   const { currentUser, userRole, logout } = useAuth();
+  const { units } = useUnits();
+  const { pathname } = useLocation();
 
   const studentNavItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
@@ -41,13 +46,18 @@ export const Sidebar = ({ collapsed, setCollapsed }) => {
     { name: 'Case Management', path: '/cases', icon: <FolderOpen size={20} /> },
     { name: 'Clinic AI', path: '/assistant', icon: <MessageSquare size={20} /> },
   ];
+  const supervisorNavItems = [
+    { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
+    { name: 'Calendar', path: '/calendar', icon: <CalendarDays size={20} /> },
+    { name: 'Clinic AI', path: '/assistant', icon: <MessageSquare size={20} /> },
+  ];
 
   const navItems =
     userRole === 'admin'
       ? adminNavItems
       : userRole === 'lawyer'
         ? lawyerNavItems
-        : studentNavItems;
+        : userRole === 'supervisor' ? supervisorNavItems : studentNavItems;
   const sidebarClassName = [
     'sidebar',
     userRole === 'admin' ? 'admin-sidebar' : '',
@@ -81,6 +91,19 @@ export const Sidebar = ({ collapsed, setCollapsed }) => {
             <span className="sidebar-text">{item.name}</span>
           </NavLink>
         ))}
+        {['admin', 'law_student', 'supervisor'].includes(userRole) && <>
+          <NavLink to="/units" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title={collapsed ? 'Units' : ''}>
+            <Library size={20} /><span className="sidebar-text">Units</span>
+          </NavLink>
+          {!collapsed && <div className="unit-sidebar-tree">
+            {units.map((unit) => <div key={unit.id}>
+              <NavLink to={`/units/${encodeURIComponent(unit.id)}/overview`} className="unit-tree-link" title={unit.name}>
+                <span aria-hidden="true">{unit.name.charAt(0)}</span><span>{unit.name}</span>
+              </NavLink>
+              {pathname.startsWith(`/units/${encodeURIComponent(unit.id)}/`) && <UnitNavigation groupId={unit.id} compact />}
+            </div>)}
+          </div>}
+        </>}
       </nav>
 
       <div className="sidebar-footer">

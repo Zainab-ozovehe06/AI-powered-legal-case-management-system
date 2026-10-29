@@ -5,3 +5,4 @@ server/resources/law-clinic-pdfs/*
 !server/resources/law-clinic-pdfs/README.md
 .env
 serviceAccountKey.json
+artifacts/unit-workspace/

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Crown,
   Loader2,
@@ -11,11 +11,14 @@ import {
   Users,
 } from 'lucide-react';
 import { api } from '../api/apiClient';
+import { Link } from 'react-router-dom';
+import { useUnits } from '../context/UnitsContext';
 
 const getDisplayName = (user) =>
   user?.name || user?.displayName || user?.email || 'Unnamed user';
 
 export default function GroupManagement() {
+  const { refresh: refreshUnits } = useUnits();
   const [groups, setGroups] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +60,7 @@ export default function GroupManagement() {
     [assignmentForm.groupId, groups]
   );
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [nextGroups, nextUsers] = await Promise.all([
@@ -67,17 +70,18 @@ export default function GroupManagement() {
 
       setGroups(nextGroups);
       setUsers(nextUsers);
+      await refreshUnits();
     } catch (error) {
       console.error('Error loading groups:', error);
       alert('Failed to load groups: ' + error.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [refreshUnits]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   const handleAssignmentGroupChange = (groupId) => {
     const group = groups.find((item) => item.id === groupId);
@@ -489,6 +493,7 @@ export default function GroupManagement() {
                         <div>
                           <div className="group-management-card-title-row">
                             <h3>{group.name}</h3>
+                            <Link to={`/units/${encodeURIComponent(group.id)}/overview`}>Open workspace</Link>
                             <span
                               className={`group-management-status group-management-status-${group.status}`}
                             >

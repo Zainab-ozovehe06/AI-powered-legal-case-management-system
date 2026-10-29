@@ -32,7 +32,8 @@ export const Topbar = ({ collapsed, setCollapsed }) => {
   const isStudentPortalView = userRole === 'law_student';
 
   let breadcrumb = 'Home';
-  if (pathName.includes('lawyer-assignment')) breadcrumb = 'Home > Lawyer Assignment';
+  if (pathName.includes('/units')) breadcrumb = 'Home > Units';
+  else if (pathName.includes('lawyer-assignment')) breadcrumb = 'Home > Lawyer Assignment';
   else if (pathName.includes('cases')) breadcrumb = 'Home > Cases';
   else if (pathName.includes('groups')) breadcrumb = 'Home > Student Groups';
   else if (pathName.includes('calendar')) breadcrumb = 'Home > Calendar';
@@ -80,6 +81,7 @@ export const Topbar = ({ collapsed, setCollapsed }) => {
   return (
     <header className="topbar">
       <div className="topbar-breadcrumb">
+        <button type="button" className="btn btn-ghost" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>☰</button>
         <span>{breadcrumb}</span>
       </div>
 

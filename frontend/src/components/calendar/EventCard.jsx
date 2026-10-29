@@ -5,6 +5,7 @@ import {
   Clock3,
   MapPin,
   Pencil,
+  Eye,
 } from 'lucide-react';
 import {
   formatEventDate,
@@ -19,6 +20,7 @@ export default function EventCard({
   event,
   compact = false,
   showCase = true,
+  readOnly = false,
   onEdit,
 }) {
   const typeMeta = getEventTypeMeta(event?.event_type);
@@ -45,9 +47,9 @@ export default function EventCard({
               type="button"
               onClick={() => onEdit(event)}
               className="event-icon-button"
-              aria-label="Edit event"
+              aria-label={readOnly ? 'View event details' : 'Edit event'}
             >
-              <Pencil size={15} />
+              {readOnly ? <Eye size={15} /> : <Pencil size={15} />}
             </button>
           ) : null}
         </div>

@@ -53,7 +53,23 @@ const getQueryString = (params = {}) => {
   return queryString ? `?${queryString}` : '';
 };
 
+const workspaceRequest = async (path, method = 'GET', body) => {
+  const response = await fetch(`${API_BASE_URL}/groups${path}`, {
+    method, headers: await getAuthHeaders(),
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!response.ok) throw new Error(await getErrorMessage(response));
+  return response.json();
+};
+
 export const api = {
+  getWorkspaces: () => workspaceRequest('/workspaces'),
+  getWorkspace: (groupId) => workspaceRequest(`/${encodeURIComponent(groupId)}/workspace`),
+  createWorkspaceItem: (groupId, kind, data) => workspaceRequest(`/${encodeURIComponent(groupId)}/workspace/${kind}`, 'POST', data),
+  updateWorkspaceItem: (groupId, kind, itemId, data) => workspaceRequest(`/${encodeURIComponent(groupId)}/workspace/${kind}/${encodeURIComponent(itemId)}`, 'PATCH', data),
+  deleteWorkspaceItem: (groupId, kind, itemId) => workspaceRequest(`/${encodeURIComponent(groupId)}/workspace/${kind}/${encodeURIComponent(itemId)}`, 'DELETE'),
+  getWorkspaceComments: (groupId, kind, itemId) => workspaceRequest(`/${encodeURIComponent(groupId)}/workspace/${kind}/${encodeURIComponent(itemId)}/comments`),
+  addWorkspaceComment: (groupId, kind, itemId, content) => workspaceRequest(`/${encodeURIComponent(groupId)}/workspace/${kind}/${encodeURIComponent(itemId)}/comments`, 'POST', { content }),
   createCase: async (caseData) => {
     const headers = await getAuthHeaders();
 
@@ -73,10 +89,10 @@ export const api = {
     return response.json();
   },
 
-  getVisibleCases: async () => {
+  getVisibleCases: async (filters = {}) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/cases`, {
+    const response = await fetch(`${API_BASE_URL}/cases${getQueryString(filters)}`, {
       method: 'GET',
       headers,
     });

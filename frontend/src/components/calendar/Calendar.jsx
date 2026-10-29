@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
+import { useUnits } from '../../context/UnitsContext';
 import EventCard from './EventCard';
 import EventModal from './EventModal';
 import {
@@ -48,8 +49,9 @@ const getEventQuery = (filters) => {
   return query;
 };
 
-export default function Calendar() {
+export default function Calendar({ groupId, groupName, inactive = false }) {
   const { currentUser, userRole } = useAuth();
+  const { units } = useUnits();
   const [cases, setCases] = useState([]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -70,11 +72,12 @@ export default function Calendar() {
   const [selectedDate, setSelectedDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const isGeneralEventReadOnly = Boolean(
+  const isGeneralEventReadOnly = inactive || userRole === 'lawyer' || Boolean(
     selectedEvent &&
       !selectedEvent.case_id &&
       userRole !== 'admin' &&
-      !(userRole === 'law_student' && selectedEvent.created_by === currentUser?.uid)
+      !(['law_student', 'supervisor'].includes(userRole) && selectedEvent.created_by === currentUser?.uid) &&
+      !(userRole === 'supervisor' && selectedEvent.group_id)
   );
 
   const fetchCalendarData = useCallback(async () => {
@@ -83,8 +86,8 @@ export default function Calendar() {
 
     try {
       const [visibleCases, visibleEvents] = await Promise.all([
-        api.getVisibleCases(),
-        api.getEvents(getEventQuery(filters)),
+        userRole === 'supervisor' ? Promise.resolve([]) : api.getVisibleCases({ group_id: groupId }),
+        api.getEvents({ ...getEventQuery(filters), group_id: groupId }),
       ]);
 
       setCases(visibleCases);
@@ -95,7 +98,7 @@ export default function Calendar() {
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, groupId, userRole]);
 
   useEffect(() => {
     fetchCalendarData();
@@ -211,21 +214,21 @@ export default function Calendar() {
     <div className="calendar-page animate-fade-in">
       <header className="calendar-hero">
         <div>
-          <p className="calendar-eyebrow">Case Scheduling</p>
+          <p className="calendar-eyebrow">{groupName || 'Law Clinic'} Scheduling</p>
           <h1 className="calendar-title">Calendar</h1>
           <p className="calendar-subtitle">
-            Court dates, interviews, deadlines, follow-ups, and case reviews.
+            Case reminders, workshops, meetings and clinic events.
           </p>
         </div>
 
-        <button
+        {userRole !== 'lawyer' && !inactive && <button
           type="button"
           onClick={() => openCreateModal()}
           className="event-primary-button calendar-add-button"
         >
           <Plus size={18} />
           Add Event
-        </button>
+        </button>}
       </header>
 
       <section className="calendar-toolbar">
@@ -471,6 +474,9 @@ export default function Calendar() {
           event={selectedEvent}
           readOnly={isGeneralEventReadOnly}
           cases={cases}
+          groups={units}
+          lockedGroupId={groupId}
+          userRole={userRole}
           defaultDate={selectedDate}
           isSubmitting={isSubmitting}
           isDeleting={isDeleting}

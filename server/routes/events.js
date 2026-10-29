@@ -8,6 +8,7 @@ import {
   getVisibleCaseIdsForStudent,
   normalizeText,
 } from '../utils/groupCollaboration.js';
+import { loadWorkspace, validDate, workspaceError } from '../utils/unitWorkspace.js';
 
 const router = express.Router();
 
@@ -184,9 +185,17 @@ const loadCaseForEventAccess = async (caseId, req) => {
   };
 };
 
-const canViewGeneralEvent = (eventData, req) => {
+const canViewGeneralEvent = async (eventData, req) => {
   if (req.currentUser?.role === 'admin') return true;
-  if (!['law_student', 'lawyer'].includes(req.currentUser?.role)) return false;
+  if (!['law_student', 'lawyer', 'supervisor'].includes(req.currentUser?.role)) return false;
+  if (req.currentUser.role === 'supervisor' && !eventData.visibility) return false;
+
+  if (eventData.visibility === 'unit' || eventData.group_id) {
+    if (!eventData.group_id) return false;
+    try { await loadWorkspace(eventData.group_id, req.currentUser); return true; }
+    catch (error) { if ([403, 404].includes(error.statusCode)) return false; throw error; }
+  }
+  if (eventData.visibility === 'clinic') return true;
 
   const actorId = getActorId(req);
   return Boolean(
@@ -199,10 +208,11 @@ const canViewGeneralEvent = (eventData, req) => {
 const assertGeneralEventManagement = (eventData, req) => {
   if (
     !eventData.case_id &&
-    req.currentUser?.role === 'law_student' &&
-    eventData.created_by !== getActorId(req)
+    req.currentUser?.role !== 'admin' &&
+    eventData.created_by !== getActorId(req) &&
+    !(req.currentUser?.role === 'supervisor' && eventData.group_id)
   ) {
-    const error = new Error('Students can only change general events they created');
+    const error = new Error('Only the organizer or an authorised unit supervisor can change this event');
     error.statusCode = 403;
     throw error;
   }
@@ -210,7 +220,7 @@ const assertGeneralEventManagement = (eventData, req) => {
 
 const assertVisibleEvent = async (eventData, req) => {
   if (!eventData?.case_id) {
-    if (canViewGeneralEvent(eventData, req)) return null;
+    if (await canViewGeneralEvent(eventData, req)) return null;
 
     const error = new Error('You are not allowed to access this event');
     error.statusCode = 403;
@@ -244,7 +254,7 @@ const validateEventPayload = async (body, req, existingEvent = null) => {
   }
 
   // Preserve the existing creation roles for general events.
-  if (!loadedCase && !['admin', 'law_student'].includes(currentUser.role)) {
+  if (!loadedCase && !['admin', 'law_student', 'supervisor'].includes(currentUser.role)) {
     const error = new Error('Access denied');
     error.statusCode = 403;
     throw error;
@@ -261,6 +271,21 @@ const validateEventPayload = async (body, req, existingEvent = null) => {
     body.start_time ?? existingEvent?.start_time
   );
   const endTime = normalizeText(body.end_time ?? existingEvent?.end_time);
+  const endDate = normalizeText(body.end_date ?? (body.date && existingEvent?.end_date === existingEvent?.date ? date : existingEvent?.end_date) ?? date);
+  const groupId = normalizeText(body.group_id !== undefined ? body.group_id : existingEvent?.group_id) || null;
+  const visibility = loadedCase ? 'case' : normalizeText(body.visibility ?? (existingEvent?.visibility === 'case' ? null : existingEvent?.visibility) ?? (groupId ? 'unit' : 'private'));
+  if (groupId) {
+    await loadWorkspace(groupId, currentUser, { write: true });
+    if (loadedCase) {
+      const assignments = await db.collection('case_assignments').where('group_id', '==', groupId).get();
+      if (!assignments.docs.some((doc) => doc.data().case_id === loadedCase.id && doc.data().assigned_to_type === ASSIGNMENT_TYPE.GROUP)) {
+        throw workspaceError(400, 'The selected case is not assigned to this unit');
+      }
+    } else if (visibility !== 'unit') throw workspaceError(400, 'Unit events must use unit visibility');
+  } else if (visibility === 'unit') throw workspaceError(400, 'Select a unit for a unit event');
+  if (!['case', 'private', 'clinic', 'unit'].includes(visibility) || (!loadedCase && visibility === 'case')) throw workspaceError(400, 'Invalid event visibility');
+  if (visibility === 'clinic' && currentUser.role !== 'admin') throw workspaceError(403, 'Only administrators can publish clinic-wide events');
+  if (body.category === 'case' && !loadedCase) throw workspaceError(400, 'Select a case for a case reminder');
 
   const status = normalizeText(
     body.status ?? existingEvent?.status ?? 'upcoming'
@@ -283,7 +308,7 @@ const validateEventPayload = async (body, req, existingEvent = null) => {
     throw error;
   }
 
-  if (!DATE_PATTERN.test(date)) {
+  if (!DATE_PATTERN.test(date) || !validDate(date) || !validDate(endDate)) {
     const error = new Error('date must be in YYYY-MM-DD format');
     error.statusCode = 400;
     throw error;
@@ -297,7 +322,7 @@ const validateEventPayload = async (body, req, existingEvent = null) => {
     throw error;
   }
 
-  if (endTime <= startTime) {
+  if (`${endDate}T${endTime}` <= `${date}T${startTime}`) {
     const error = new Error('end_time must be after start_time');
     error.statusCode = 400;
     throw error;
@@ -355,6 +380,10 @@ const validateEventPayload = async (body, req, existingEvent = null) => {
         )
       : null,
     date,
+    end_date: endDate,
+    group_id: groupId,
+    visibility,
+    category: loadedCase ? 'case' : 'general',
     start_time: startTime,
     end_time: endTime,
     location: normalizeOptionalText(
@@ -374,6 +403,7 @@ const validateEventPayload = async (body, req, existingEvent = null) => {
 const eventMatchesQuery = (event, query) => {
   const eventType = normalizeText(query.event_type);
   const caseId = normalizeText(query.case_id);
+  const groupId = normalizeText(query.group_id);
   const status = normalizeText(query.status);
   const date = normalizeText(query.date);
   const dateFrom = normalizeText(query.date_from || query.from);
@@ -386,6 +416,7 @@ const eventMatchesQuery = (event, query) => {
   if (caseId && caseId !== 'all' && event.case_id !== caseId) {
     return false;
   }
+  if (groupId && event.group_id !== groupId && !query.workspaceCaseIds?.has(event.case_id)) return false;
 
   if (status && status !== 'all' && event.status !== status) {
     return false;
@@ -456,6 +487,7 @@ router.post('/events', requireAuth, async (req, res) => {
       ...eventPayload,
       created_by: actorId,
       created_by_role: req.currentUser.role,
+      organizer: normalizeText(req.currentUser.name || req.currentUser.displayName || req.currentUser.email) || 'Clinic member',
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       updated_at: admin.firestore.FieldValue.serverTimestamp(),
     };
@@ -493,6 +525,12 @@ router.get('/events', requireAuth, async (req, res) => {
     const currentUser = req.currentUser;
     const actorId = getActorId(req);
     let events = [];
+    const filters = { ...req.query };
+    if (normalizeText(req.query.group_id)) {
+      await loadWorkspace(normalizeText(req.query.group_id), currentUser);
+      const assignments = await db.collection('case_assignments').where('group_id', '==', normalizeText(req.query.group_id)).get();
+      filters.workspaceCaseIds = new Set(assignments.docs.filter((doc) => doc.data().assigned_to_type === ASSIGNMENT_TYPE.GROUP).map((doc) => doc.data().case_id));
+    }
 
     if (!actorId) {
       return res.status(401).json({ error: 'Authenticated user ID missing' });
@@ -503,12 +541,12 @@ router.get('/events', requireAuth, async (req, res) => {
       events = snapshot.docs.map(serializeEventDoc);
     } else if (
       currentUser.role === 'law_student' ||
-      currentUser.role === 'lawyer'
+      currentUser.role === 'lawyer' || currentUser.role === 'supervisor'
     ) {
       const caseIds =
         currentUser.role === 'law_student'
           ? await getVisibleCaseIdsForStudent(actorId)
-          : await getDirectCaseIdsForUser(actorId);
+          : currentUser.role === 'lawyer' ? await getDirectCaseIdsForUser(actorId) : [];
 
       const caseDocs = caseIds.length
         ? await Promise.all(
@@ -529,20 +567,20 @@ router.get('/events', requireAuth, async (req, res) => {
         db.collection('events').where('case_id', '==', null).get(),
       ]);
 
+      const generalEvents = generalEventsSnapshot.docs.map(serializeEventDoc);
+      const generalAccess = await Promise.all(generalEvents.map((event) => canViewGeneralEvent(event, req)));
       events = [
         ...eventSnapshots.flatMap((snapshot) =>
           snapshot.docs.map(serializeEventDoc)
         ),
-        ...generalEventsSnapshot.docs
-          .map(serializeEventDoc)
-          .filter((event) => canViewGeneralEvent(event, req)),
+        ...generalEvents.filter((_event, index) => generalAccess[index]),
       ];
     } else {
       return res.status(403).json({ error: 'Access denied' });
     }
 
     const filteredEvents = applyLimit(
-      sortEvents(events.filter((event) => eventMatchesQuery(event, req.query))),
+      sortEvents(events.filter((event) => eventMatchesQuery(event, filters))),
       req.query
     );
 
@@ -550,7 +588,7 @@ router.get('/events', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching events:', error);
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       error: error.message || 'Failed to fetch events',
     });
   }

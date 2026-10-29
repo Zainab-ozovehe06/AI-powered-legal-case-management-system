@@ -3,17 +3,22 @@ import { createPortal } from 'react-dom';
 import { Loader2, Save, Trash2, X } from 'lucide-react';
 import {
   EVENT_TYPE_OPTIONS,
+  LEGACY_EVENT_TYPE_OPTIONS,
   REMINDER_OPTIONS,
   STATUS_OPTIONS,
   getEventTypeMeta,
   getTodayDateString,
 } from './eventUtils';
 
-const buildInitialForm = ({ event, defaultDate, lockedCaseId }) => ({
+const buildInitialForm = ({ event, defaultDate, lockedCaseId, lockedGroupId }) => ({
   title: event?.title || '',
   event_type: event?.event_type || EVENT_TYPE_OPTIONS[0].value,
   case_id: lockedCaseId || event?.case_id || '',
+  category: lockedCaseId || event?.case_id ? 'case' : 'general',
+  group_id: lockedGroupId || event?.group_id || '',
+  visibility: event?.visibility || (lockedGroupId || event?.group_id ? 'unit' : 'private'),
   date: event?.date || defaultDate || getTodayDateString(),
+  end_date: event?.end_date || event?.date || defaultDate || getTodayDateString(),
   start_time: event?.start_time || '09:00',
   end_time: event?.end_time || '10:00',
   location: event?.location || '',
@@ -29,6 +34,9 @@ export default function EventModal({
   defaultDate,
   lockedCaseId,
   lockedCaseTitle,
+  groups = [],
+  lockedGroupId,
+  userRole,
   readOnly = false,
   isSubmitting = false,
   isDeleting = false,
@@ -37,7 +45,7 @@ export default function EventModal({
   onDelete,
 }) {
   const [form, setForm] = useState(() =>
-    buildInitialForm({ event, defaultDate, lockedCaseId })
+    buildInitialForm({ event, defaultDate, lockedCaseId, lockedGroupId })
   );
 
   const caseOptions = useMemo(() => {
@@ -66,7 +74,8 @@ export default function EventModal({
 
     onSubmit({
       ...form,
-      case_id: form.case_id || null,
+      case_id: form.category === 'case' ? form.case_id : null,
+      visibility: form.category === 'case' ? 'case' : form.visibility,
       reminder_minutes_before: Number(form.reminder_minutes_before),
     });
   };
@@ -93,6 +102,12 @@ export default function EventModal({
 
         <form onSubmit={handleSubmit} className="event-modal-form">
           <label className="event-form-field event-form-field-wide">
+            <span className="event-form-label">Activity category</span>
+            <select className="event-form-input" value={form.category} disabled={readOnly || Boolean(lockedCaseId)} onChange={(event) => setForm({ ...form, category: event.target.value, case_id: '', visibility: form.group_id ? 'unit' : 'private' })}>
+              <option value="general">Clinic / unit event</option><option value="case">Case-related reminder</option>
+            </select>
+          </label>
+          <label className="event-form-field event-form-field-wide">
             <span className="event-form-label">Title</span>
             <input
               type="text"
@@ -114,12 +129,12 @@ export default function EventModal({
               required
             >
               {event?.event_type &&
-              !EVENT_TYPE_OPTIONS.some((option) => option.value === event.event_type) ? (
+              ![...EVENT_TYPE_OPTIONS, ...LEGACY_EVENT_TYPE_OPTIONS].some((option) => option.value === event.event_type) ? (
                 <option value={event.event_type}>
                   {getEventTypeMeta(event.event_type).label}
                 </option>
               ) : null}
-              {EVENT_TYPE_OPTIONS.map((option) => (
+              {[...EVENT_TYPE_OPTIONS, ...LEGACY_EVENT_TYPE_OPTIONS].map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -127,16 +142,16 @@ export default function EventModal({
             </select>
           </label>
 
-          <label className="event-form-field">
-            <span className="event-form-label">Related Case (Optional)</span>
+          {form.category === 'case' && <label className="event-form-field">
+            <span className="event-form-label">Related Case</span>
             <select
               value={form.case_id}
               onChange={(e) => setForm({ ...form, case_id: e.target.value })}
               className="event-form-input"
-              required={Boolean(lockedCaseId)}
+              required
               disabled={readOnly || Boolean(lockedCaseId)}
             >
-              <option value="">No case - general event</option>
+              <option value="">Select case</option>
               {caseOptions.map((caseItem) => (
                 <option key={caseItem.id} value={caseItem.id}>
                   {caseItem.caseDisplayId ? `Case ${caseItem.caseDisplayId} - ` : ''}
@@ -145,7 +160,22 @@ export default function EventModal({
                 </option>
               ))}
             </select>
-          </label>
+          </label>}
+
+          {form.category === 'general' && <>
+            <label className="event-form-field"><span className="event-form-label">Audience</span>
+              <select className="event-form-input" value={form.visibility} disabled={readOnly || Boolean(lockedGroupId)} onChange={(event) => setForm({ ...form, visibility: event.target.value, group_id: event.target.value === 'unit' ? form.group_id : '' })}>
+                <option value="private">Private / invited users</option><option value="unit">Unit members</option>
+                {(userRole === 'admin' || event?.visibility === 'clinic') && <option value="clinic">Entire clinic</option>}
+              </select>
+            </label>
+            {form.visibility === 'unit' && <label className="event-form-field"><span className="event-form-label">Unit</span>
+              <select required className="event-form-input" value={form.group_id} disabled={readOnly || Boolean(lockedGroupId)} onChange={(event) => setForm({ ...form, group_id: event.target.value })}>
+                <option value="">Select unit</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+                {form.group_id && !groups.some((group) => group.id === form.group_id) && <option value={form.group_id}>Assigned unit</option>}
+              </select>
+            </label>}
+          </>}
 
           <label className="event-form-field">
             <span className="event-form-label">Date</span>
@@ -153,11 +183,13 @@ export default function EventModal({
               type="date"
               value={form.date}
               disabled={readOnly}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
+              onChange={(e) => setForm({ ...form, date: e.target.value, end_date: form.end_date === form.date || form.end_date < e.target.value ? e.target.value : form.end_date })}
               className="event-form-input"
               required
             />
           </label>
+
+          <label className="event-form-field"><span className="event-form-label">End date</span><input type="date" className="event-form-input" required disabled={readOnly} min={form.date} value={form.end_date} onChange={(event) => setForm({ ...form, end_date: event.target.value })} /></label>
 
           <div className="event-form-row">
             <label className="event-form-field">
@@ -220,7 +252,7 @@ export default function EventModal({
           </label>
 
           <label className="event-form-field event-form-field-wide">
-            <span className="event-form-label">Location</span>
+            <span className="event-form-label">Location / meeting link</span>
             <input
               type="text"
               value={form.location}
@@ -229,6 +261,7 @@ export default function EventModal({
               className="event-form-input"
             />
           </label>
+          {event?.organizer && <p className="event-form-field-wide">Organized by {event.organizer}</p>}
 
           <label className="event-form-field event-form-field-wide">
             <span className="event-form-label">Description</span>

@@ -17,6 +17,8 @@ import NewCase from './pages/NewCase';
 import GroupManagement from './pages/GroupManagement';
 import LegalAssistant from './pages/LegalAssistant';
 import LawyerAssignment from './pages/LawyerAssignment';
+import Units from './pages/Units';
+import UnitWorkspace from './pages/UnitWorkspace';
 
 const DashboardRouter = () => {
   const { currentUser, userRole } = useAuth();
@@ -25,6 +27,7 @@ const DashboardRouter = () => {
   if (userRole === 'admin') return <AdminDashboard />;
   if (userRole === 'law_student') return <StudentDashboard />;
   if (userRole === 'lawyer') return <StudentCases />;
+  if (userRole === 'supervisor') return <Units />;
 
   return <Navigate to="/login" replace />;
 };
@@ -47,6 +50,22 @@ function App() {
           <Route index element={<DashboardRouter />} />
 
           <Route path="calendar" element={<CalendarView />} />
+          <Route
+            path="units"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'law_student', 'supervisor']}>
+                <Units />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="units/:groupId/:section?"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'law_student', 'supervisor']}>
+                <UnitWorkspace />
+              </RoleProtectedRoute>
+            }
+          />
           <Route
             path="assistant"
             element={
