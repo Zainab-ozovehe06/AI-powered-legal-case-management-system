@@ -6,7 +6,7 @@ export const workspaceError = (statusCode, message) => Object.assign(new Error(m
 // A workspace is a view of an existing group. There is no separate workspace
 // record or membership list to provision, migrate, or keep in sync.
 export const getWorkspaceGroupIds = async (user) => {
-  if (user.role === 'law_student') return getGroupIdsForUser(user.uid);
+  if (['law_student', 'lawyer'].includes(user.role)) return getGroupIdsForUser(user.uid);
   if (user.role === 'supervisor') {
     const snapshot = await db.collection('groups').where('supervisor_id', '==', user.uid).get();
     return snapshot.docs.map((doc) => doc.id);
@@ -15,7 +15,7 @@ export const getWorkspaceGroupIds = async (user) => {
 };
 
 export const loadWorkspace = async (groupId, user, { write = false } = {}) => {
-  if (!['admin', 'law_student', 'supervisor'].includes(user?.role)) {
+  if (!['admin', 'law_student', 'lawyer', 'supervisor'].includes(user?.role)) {
     throw workspaceError(403, 'You do not have access to unit workspaces');
   }
   const doc = await db.collection('groups').doc(groupId).get();
@@ -37,6 +37,15 @@ export const publicProfile = (user, id) => ({
   name: normalizeText(user?.name || user?.displayName || user?.email) || 'Clinic member',
   email: user?.email || null,
   role: user?.role || 'law_student',
+});
+
+export const publicGroupProfiles = (group) => ({
+  ...group,
+  leader: group.leader ? publicProfile(group.leader, group.leader_id) : null,
+  members: (group.members || []).map((member) => ({
+    ...member,
+    user: member.user ? publicProfile(member.user, member.user_id) : null,
+  })),
 });
 
 export const workspaceManager = (user) => ['admin', 'supervisor'].includes(user?.role);

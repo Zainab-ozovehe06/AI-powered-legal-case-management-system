@@ -65,6 +65,7 @@ const workspaceRequest = async (path, method = 'GET', body) => {
 export const api = {
   getWorkspaces: () => workspaceRequest('/workspaces'),
   getWorkspace: (groupId) => workspaceRequest(`/${encodeURIComponent(groupId)}/workspace`),
+  getWorkspaceActivities: (groupId, filters = {}) => workspaceRequest(`/${encodeURIComponent(groupId)}/workspace/activities${getQueryString(filters)}`),
   createWorkspaceItem: (groupId, kind, data) => workspaceRequest(`/${encodeURIComponent(groupId)}/workspace/${kind}`, 'POST', data),
   updateWorkspaceItem: (groupId, kind, itemId, data) => workspaceRequest(`/${encodeURIComponent(groupId)}/workspace/${kind}/${encodeURIComponent(itemId)}`, 'PATCH', data),
   deleteWorkspaceItem: (groupId, kind, itemId) => workspaceRequest(`/${encodeURIComponent(groupId)}/workspace/${kind}/${encodeURIComponent(itemId)}`, 'DELETE'),
@@ -340,6 +341,11 @@ export const api = {
   },
 
   // Documents
+  getCaseDocuments: async (caseId) => {
+    const response = await fetch(`${API_BASE_URL}/documents/${encodeURIComponent(caseId)}`, { headers: await getAuthHeaders() });
+    if (!response.ok) throw new Error(await getErrorMessage(response));
+    return response.json();
+  },
   uploadDocument: async (caseId, file) => {
     const token = await getCurrentUserToken();
 
@@ -424,13 +430,14 @@ export const api = {
   },
 
   // AI Assistant
-  sendAssistantMessage: async ({ prompt, files = [], conversation = [], contextPath = '' }) => {
+  sendAssistantMessage: async ({ prompt, files = [], conversation = [], contextPath = '', caseId = '' }) => {
     const token = await getCurrentUserToken();
     const formData = new FormData();
 
     formData.append('prompt', prompt);
     formData.append('conversation', JSON.stringify(conversation));
     formData.append('contextPath', contextPath);
+    if (caseId) formData.append('case_id', caseId);
 
     files.forEach((file) => {
       formData.append('references', file);

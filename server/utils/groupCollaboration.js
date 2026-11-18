@@ -55,6 +55,14 @@ export const assertLawStudentUser = async (userId) => {
   };
 };
 
+export const assertGroupMemberUser = async (userId) => {
+  const doc = await db.collection('users').doc(userId).get();
+  if (!doc.exists || !['law_student', 'lawyer'].includes(doc.data().role)) {
+    throw Object.assign(new Error('Group members must be law students or lawyers'), { statusCode: 400 });
+  }
+  return { ...doc.data(), id: doc.id };
+};
+
 export const getUsersByIds = async (userIds) => {
   const uniqueUserIds = normalizeIdArray(userIds);
   const docs = await Promise.all(

@@ -3,12 +3,11 @@ import { admin, db } from '../config/firebase.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import {
   ASSIGNMENT_TYPE,
-  canStudentAccessCase,
-  getDirectCaseIdsForUser,
-  getVisibleCaseIdsForStudent,
   normalizeText,
 } from '../utils/groupCollaboration.js';
 import { loadWorkspace, validDate, workspaceError } from '../utils/unitWorkspace.js';
+import { canUserAccessCase, getVisibleCaseIds } from '../utils/caseAccess.js';
+import { canViewCaseEventAudience } from '../utils/eventAccess.js';
 
 const router = express.Router();
 
@@ -149,20 +148,7 @@ const loadCaseForEventAccess = async (caseId, req) => {
 
   const assignedUserIds = await getAssignedUserIdsForCase(safeCaseId);
 
-  const studentHasAccess =
-    currentUser.role === 'law_student' &&
-    (await canStudentAccessCase(actorId, safeCaseId, caseDoc.data()));
-
-  if (currentUser.role === 'law_student' && !studentHasAccess) {
-    const error = new Error('You are not assigned to this case');
-    error.statusCode = 403;
-    throw error;
-  }
-
-  const lawyerHasAccess =
-    currentUser.role === 'lawyer' && assignedUserIds.includes(actorId);
-
-  if (currentUser.role === 'lawyer' && !lawyerHasAccess) {
+  if (!await canUserAccessCase(currentUser, safeCaseId, caseDoc.data())) {
     const error = new Error('You are not assigned to this case');
     error.statusCode = 403;
     throw error;
@@ -171,7 +157,7 @@ const loadCaseForEventAccess = async (caseId, req) => {
   if (
     currentUser.role !== 'admin' &&
     currentUser.role !== 'law_student' &&
-    currentUser.role !== 'lawyer'
+    currentUser.role !== 'lawyer' && currentUser.role !== 'supervisor'
   ) {
     const error = new Error('Access denied');
     error.statusCode = 403;
@@ -190,7 +176,7 @@ const canViewGeneralEvent = async (eventData, req) => {
   if (!['law_student', 'lawyer', 'supervisor'].includes(req.currentUser?.role)) return false;
   if (req.currentUser.role === 'supervisor' && !eventData.visibility) return false;
 
-  if (eventData.visibility === 'unit' || eventData.group_id) {
+  if (eventData.visibility === 'unit' || (eventData.group_id && !eventData.visibility)) {
     if (!eventData.group_id) return false;
     try { await loadWorkspace(eventData.group_id, req.currentUser); return true; }
     catch (error) { if ([403, 404].includes(error.statusCode)) return false; throw error; }
@@ -210,7 +196,7 @@ const assertGeneralEventManagement = (eventData, req) => {
     !eventData.case_id &&
     req.currentUser?.role !== 'admin' &&
     eventData.created_by !== getActorId(req) &&
-    !(req.currentUser?.role === 'supervisor' && eventData.group_id)
+    !(req.currentUser?.role === 'supervisor' && eventData.group_id && eventData.visibility === 'unit')
   ) {
     const error = new Error('Only the organizer or an authorised unit supervisor can change this event');
     error.statusCode = 403;
@@ -227,7 +213,9 @@ const assertVisibleEvent = async (eventData, req) => {
     throw error;
   }
 
-  return loadCaseForEventAccess(eventData.case_id, req);
+  const loaded = await loadCaseForEventAccess(eventData.case_id, req);
+  if (!await canViewCaseEventAudience(eventData, req.currentUser)) throw workspaceError(403, 'You are not in this event audience');
+  return loaded;
 };
 
 const validateEventPayload = async (body, req, existingEvent = null) => {
@@ -244,13 +232,12 @@ const validateEventPayload = async (body, req, existingEvent = null) => {
     ? await loadCaseForEventAccess(caseId, req)
     : null;
 
-  // Preserve the existing rule that lawyers cannot create or modify events.
-  if (currentUser.role === 'lawyer') {
-    const error = new Error(
-      'Lawyers can view scheduled events but cannot change them'
-    );
-    error.statusCode = 403;
-    throw error;
+  if (currentUser.role === 'supervisor' && (loadedCase || existingEvent?.case_id)) {
+    throw workspaceError(403, 'Supervisors have read-only access to case events');
+  }
+  if (currentUser.role === 'lawyer' && !loadedCase) throw workspaceError(403, 'Lawyers can schedule reminders only for assigned cases');
+  if (currentUser.role === 'lawyer' && existingEvent && existingEvent.created_by !== actorId) {
+    throw workspaceError(403, 'You can only change your own case reminders');
   }
 
   // Preserve the existing creation roles for general events.
@@ -349,7 +336,7 @@ const validateEventPayload = async (body, req, existingEvent = null) => {
       ? normalizeStringArray(body.assigned_users)
       : normalizeStringArray(existingEvent?.assigned_users);
 
-  if (currentUser.role === 'law_student' && loadedCase) {
+  if (['law_student', 'lawyer'].includes(currentUser.role) && loadedCase) {
     const invalidUsers = assignedUsers.filter(
       (userId) => !loadedCase.assignedUserIds.includes(userId)
     );
@@ -543,10 +530,7 @@ router.get('/events', requireAuth, async (req, res) => {
       currentUser.role === 'law_student' ||
       currentUser.role === 'lawyer' || currentUser.role === 'supervisor'
     ) {
-      const caseIds =
-        currentUser.role === 'law_student'
-          ? await getVisibleCaseIdsForStudent(actorId)
-          : currentUser.role === 'lawyer' ? await getDirectCaseIdsForUser(actorId) : [];
+      const caseIds = await getVisibleCaseIds(currentUser);
 
       const caseDocs = caseIds.length
         ? await Promise.all(
@@ -579,8 +563,9 @@ router.get('/events', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
+    const audiences = await Promise.all(events.map((event) => !event.case_id || canViewCaseEventAudience(event, currentUser)));
     const filteredEvents = applyLimit(
-      sortEvents(events.filter((event) => eventMatchesQuery(event, filters))),
+      sortEvents(events.filter((event, index) => audiences[index] && eventMatchesQuery(event, filters))),
       req.query
     );
 
@@ -628,9 +613,9 @@ router.get('/cases/:caseId/events', requireAuth, async (req, res) => {
       .where('case_id', '==', caseId)
       .get();
 
-    const events = snapshot.docs
-      .map(serializeEventDoc)
-      .filter((event) => eventMatchesQuery(event, req.query));
+    const records = snapshot.docs.map(serializeEventDoc);
+    const audiences = await Promise.all(records.map((event) => canViewCaseEventAudience(event, req.currentUser)));
+    const events = records.filter((event, index) => audiences[index] && eventMatchesQuery(event, req.query));
 
     return res.status(200).json(applyLimit(sortEvents(events), req.query));
   } catch (error) {
@@ -726,10 +711,9 @@ router.delete('/events/:eventId', requireAuth, async (req, res) => {
     await assertVisibleEvent(existingEvent, req);
     assertGeneralEventManagement(existingEvent, req);
 
-    if (req.currentUser.role === 'lawyer') {
-      return res.status(403).json({
-        error: 'Lawyers can view scheduled events but cannot change them',
-      });
+    if (req.currentUser.role === 'supervisor' && existingEvent.case_id) throw workspaceError(403, 'Supervisors have read-only access to case events');
+    if (req.currentUser.role === 'lawyer' && (!existingEvent.case_id || existingEvent.created_by !== actorId)) {
+      throw workspaceError(403, 'You can only cancel your own assigned-case reminders');
     }
 
     if (hardDelete) {

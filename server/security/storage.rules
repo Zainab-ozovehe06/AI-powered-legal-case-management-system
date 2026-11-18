@@ -1,0 +1,10 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Objects are served through authenticated Express downloads. No public
+    // URLs, signed URLs, or Firebase download tokens are created by uploads.
+    match /{object=**} {
+      allow read, write: if false;
+    }
+  }
+}

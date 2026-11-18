@@ -4,13 +4,13 @@ import { useUnits } from '../context/UnitsContext';
 import { useAuth } from '../context/AuthContext';
 import '../components/workspace/workspace.css';
 
-export default function Units() {
+export default function Units({ dashboard = false }) {
   const { units, loading, error, refresh } = useUnits();
   const { userRole } = useAuth();
   return <div className="unit-directory">
-    <header className="workspace-section-heading"><div><p className="workspace-eyebrow">LAW CLINIC / TEAMSPACES</p><h1>Your units</h1>
-      <p>A home for your team's ideas, reports and shared work.</p></div>
-      {userRole === 'admin' && <Link className="btn btn-primary" to="/admin/groups"><Plus size={16} />Manage units</Link>}
+    <header className="workspace-section-heading"><div><p className="workspace-eyebrow">LAW CLINIC / TEAMSPACES</p><h1>{dashboard ? 'Supervisor Dashboard' : 'Your units'}</h1>
+      <p>{dashboard ? 'Your units: review student reports, activities and cases from each workspace.' : "A home for your team's ideas, reports and shared work."}</p></div>
+      {userRole === 'admin' && <Link className="btn btn-primary" to="/admin/groups/list"><Plus size={16} />Manage units</Link>}
     </header>
     {loading && <p role="status" className="workspace-empty">Loading your units…</p>}
     {error && <div role="alert" className="workspace-error">{error} <button className="btn btn-secondary" onClick={refresh}>Try again</button></div>}

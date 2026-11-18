@@ -15,6 +15,7 @@ import AdminSettings from './pages/AdminSettings';
 import StudentCases from './pages/StudentCases';
 import NewCase from './pages/NewCase';
 import GroupManagement from './pages/GroupManagement';
+import GroupList from './pages/GroupList';
 import LegalAssistant from './pages/LegalAssistant';
 import LawyerAssignment from './pages/LawyerAssignment';
 import Units from './pages/Units';
@@ -26,8 +27,8 @@ const DashboardRouter = () => {
   if (!currentUser) return <Navigate to="/login" replace />;
   if (userRole === 'admin') return <AdminDashboard />;
   if (userRole === 'law_student') return <StudentDashboard />;
-  if (userRole === 'lawyer') return <StudentCases />;
-  if (userRole === 'supervisor') return <Units />;
+  if (userRole === 'lawyer') return <StudentDashboard />;
+  if (userRole === 'supervisor') return <Units dashboard />;
 
   return <Navigate to="/login" replace />;
 };
@@ -53,7 +54,7 @@ function App() {
           <Route
             path="units"
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'law_student', 'supervisor']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'law_student', 'supervisor', 'lawyer']}>
                 <Units />
               </RoleProtectedRoute>
             }
@@ -61,7 +62,7 @@ function App() {
           <Route
             path="units/:groupId/:section?"
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'law_student', 'supervisor']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'law_student', 'supervisor', 'lawyer']}>
                 <UnitWorkspace />
               </RoleProtectedRoute>
             }
@@ -121,6 +122,15 @@ function App() {
           />
 
           <Route
+            path="admin/groups/list"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin']}>
+                <GroupList />
+              </RoleProtectedRoute>
+            }
+          />
+
+          <Route
             path="admin/lawyer-assignment"
             element={
               <RoleProtectedRoute allowedRoles={['admin']}>
@@ -141,7 +151,7 @@ function App() {
           <Route
             path="cases"
             element={
-              <RoleProtectedRoute allowedRoles={['law_student', 'lawyer']}>
+              <RoleProtectedRoute allowedRoles={['law_student', 'lawyer', 'supervisor']}>
                 <StudentCases />
               </RoleProtectedRoute>
             }
@@ -159,7 +169,7 @@ function App() {
           <Route
             path="cases/:caseId"
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'law_student', 'lawyer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'law_student', 'lawyer', 'supervisor']}>
                 <CaseDetail />
               </RoleProtectedRoute>
             }

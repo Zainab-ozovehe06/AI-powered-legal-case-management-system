@@ -3,12 +3,13 @@ import { admin, db } from '../config/firebase.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import {
   addActivity, canStudentAccessCase, getGroupMembers, getUsersByIds,
-  getVisibleCaseIdsForStudent, isCaseAssignedToGroup,
+  isCaseAssignedToGroup,
 } from '../utils/groupCollaboration.js';
 import {
   getWorkspaceGroupIds, loadWorkspace, publicProfile, requiredText,
   validDate, workspaceError, workspaceManager,
 } from '../utils/unitWorkspace.js';
+import { getSupervisionScope, getVisibleCaseIds } from '../utils/caseAccess.js';
 
 const router = express.Router();
 const now = () => admin.firestore.FieldValue.serverTimestamp();
@@ -27,14 +28,16 @@ const access = (req, write = false) => loadWorkspace(req.params.groupId, req.cur
 
 const visibleReflections = async (groupId, user) => {
   const reflections = await records('group_reflections', groupId);
-  let caseIds = user.role === 'law_student' && reflections.some((item) => item.case_id)
-    ? await getVisibleCaseIdsForStudent(user.uid) : [];
+  let caseIds = ['law_student', 'supervisor', 'lawyer'].includes(user.role) && reflections.some((item) => item.case_id)
+    ? await getVisibleCaseIds(user) : [];
   if (caseIds.length) {
     const referenced = new Set(reflections.map((item) => item.case_id).filter(Boolean));
     const docs = await Promise.all(caseIds.filter((id) => referenced.has(id)).map((id) => db.collection('cases').doc(id).get()));
     caseIds = docs.filter((doc) => doc.exists && !doc.data().is_deleted).map((doc) => doc.id);
   }
+  const students = user.role === 'supervisor' ? (await getSupervisionScope(user, groupId)).studentIds : null;
   return recent(reflections.filter((item) => {
+    if (students && !students.includes(item.submitted_by)) return false;
     // Case-linked content keeps case-level protection even if a legacy record
     // accidentally has a unit visibility flag. Legacy reflections stay restricted.
     if (item.case_id && user.role !== 'admin' && !caseIds.includes(item.case_id)) return false;
@@ -58,7 +61,7 @@ const membersFor = async (group) => {
 
 router.get('/workspaces', requireAuth, route(async (req, res) => {
   const user = req.currentUser;
-  if (!['admin', 'supervisor', 'law_student'].includes(user.role)) throw workspaceError(403, 'Access denied');
+  if (!['admin', 'supervisor', 'law_student', 'lawyer'].includes(user.role)) throw workspaceError(403, 'Access denied');
   const docs = user.role === 'admin'
     ? (await db.collection('groups').get()).docs
     : await Promise.all((await getWorkspaceGroupIds(user)).map((id) => db.collection('groups').doc(id).get()));
@@ -68,6 +71,37 @@ router.get('/workspaces', requireAuth, route(async (req, res) => {
       return { id: doc.id, name: group.name, description: group.description || '', status: group.status,
         supervisor_name: group.supervisor_name || null };
     }).sort((a, b) => a.name.localeCompare(b.name)));
+}));
+
+router.get('/:groupId/workspace/activities', requireAuth, route(async (req, res) => {
+  const group = await access(req);
+  if (!workspaceManager(req.currentUser)) throw workspaceError(403, 'Only unit supervisors and administrators can monitor student activities');
+  const members = await getGroupMembers(group.id);
+  const users = await getUsersByIds(members.map((member) => member.user_id));
+  const students = members.map((member) => member.user_id).filter((id) => users[id]?.role === 'law_student' && users[id]?.status === 'active');
+  const selected = req.query.student_id;
+  if (selected && !students.includes(selected)) throw workspaceError(403, 'Student is outside this supervision scope');
+  for (const field of ['date_from', 'date_to']) {
+    if (req.query[field] && !validDate(req.query[field])) throw workspaceError(400, 'Invalid date filter');
+  }
+  const ids = selected ? [selected] : students;
+  const snapshots = await Promise.all(ids.map((id) => db.collection('activities').where('logged_by_user_id', '==', id).get()));
+  const visible = req.currentUser.role === 'admin' ? null : new Set(await getVisibleCaseIds(req.currentUser));
+  const activities = await Promise.all(snapshots.flatMap((snapshot) => snapshot.docs).map(async (doc) => {
+    const item = doc.data();
+    const date = new Date(millis(item.logged_at)).toISOString().slice(0, 10);
+    if ((req.query.date_from && date < req.query.date_from) || (req.query.date_to && date > req.query.date_to)) return null;
+    const caseDoc = item.case_id ? await db.collection('cases').doc(item.case_id).get() : null;
+    const allowed = caseDoc?.exists && !caseDoc.data().is_deleted && (!visible || visible.has(item.case_id));
+    // Never return a private description, case ID, court, filename or arbitrary
+    // legacy fields merely because the author is a supervised student.
+    return { id: doc.id, logged_at: item.logged_at || null, logged_by_user_id: item.logged_by_user_id,
+      student_name: publicProfile(users[item.logged_by_user_id], item.logged_by_user_id).name,
+      description: allowed ? item.description : 'Recorded a case activity (details restricted)',
+      case_id: allowed ? item.case_id : null, case_title: allowed ? caseDoc.data().client_name || 'Case' : null,
+      court_name: allowed ? item.court_name || null : null, restricted: !allowed };
+  }));
+  res.json(activities.filter(Boolean).sort((a, b) => millis(b.logged_at) - millis(a.logged_at)));
 }));
 
 router.get('/:groupId/workspace', requireAuth, route(async (req, res) => {

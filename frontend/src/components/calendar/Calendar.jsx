@@ -72,12 +72,13 @@ export default function Calendar({ groupId, groupName, inactive = false }) {
   const [selectedDate, setSelectedDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const isGeneralEventReadOnly = inactive || userRole === 'lawyer' || Boolean(
+  const isGeneralEventReadOnly = inactive || Boolean(userRole === 'supervisor' && selectedEvent?.case_id) ||
+    Boolean(userRole === 'lawyer' && selectedEvent && (!selectedEvent.case_id || selectedEvent.created_by !== currentUser?.uid)) || Boolean(
     selectedEvent &&
       !selectedEvent.case_id &&
       userRole !== 'admin' &&
-      !(['law_student', 'supervisor'].includes(userRole) && selectedEvent.created_by === currentUser?.uid) &&
-      !(userRole === 'supervisor' && selectedEvent.group_id)
+      !(['law_student', 'supervisor', 'lawyer'].includes(userRole) && selectedEvent.created_by === currentUser?.uid) &&
+      !(userRole === 'supervisor' && selectedEvent.group_id && selectedEvent.visibility === 'unit')
   );
 
   const fetchCalendarData = useCallback(async () => {
@@ -86,7 +87,7 @@ export default function Calendar({ groupId, groupName, inactive = false }) {
 
     try {
       const [visibleCases, visibleEvents] = await Promise.all([
-        userRole === 'supervisor' ? Promise.resolve([]) : api.getVisibleCases({ group_id: groupId }),
+        api.getVisibleCases({ group_id: groupId }),
         api.getEvents({ ...getEventQuery(filters), group_id: groupId }),
       ]);
 
@@ -221,7 +222,7 @@ export default function Calendar({ groupId, groupName, inactive = false }) {
           </p>
         </div>
 
-        {userRole !== 'lawyer' && !inactive && <button
+        {!inactive && (userRole !== 'lawyer' || cases.length > 0) && <button
           type="button"
           onClick={() => openCreateModal()}
           className="event-primary-button calendar-add-button"

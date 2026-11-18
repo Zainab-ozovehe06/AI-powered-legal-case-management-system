@@ -1,10 +1,6 @@
 import { db } from '../config/firebase.js';
-import {
-  canStudentAccessCase,
-  getActorId,
-  getDirectCaseIdsForUser,
-  isCaseDeleted,
-} from '../utils/groupCollaboration.js';
+import { getActorId, isCaseDeleted } from '../utils/groupCollaboration.js';
+import { canUserAccessCase } from '../utils/caseAccess.js';
 
 const canAccessCase = async (req, res, next) => {
   try {
@@ -24,32 +20,16 @@ const canAccessCase = async (req, res, next) => {
       return next();
     }
 
-    if (currentUser.role === 'law_student') {
+    if (['law_student', 'lawyer', 'supervisor'].includes(currentUser.role)) {
       const caseDoc = await db.collection('cases').doc(caseId).get();
 
       if (!caseDoc.exists || isCaseDeleted(caseDoc.data())) {
         return res.status(404).json({ error: 'Case not found' });
       }
 
-      const hasAccess = await canStudentAccessCase(actorId, caseId, caseDoc.data());
+      const hasAccess = await canUserAccessCase(currentUser, caseId, caseDoc.data());
 
       if (!hasAccess) {
-        return res.status(403).json({ error: 'You are not assigned to this case' });
-      }
-
-      return next();
-    }
-
-    if (currentUser.role === 'lawyer') {
-      const caseDoc = await db.collection('cases').doc(caseId).get();
-
-      if (!caseDoc.exists || isCaseDeleted(caseDoc.data())) {
-        return res.status(404).json({ error: 'Case not found' });
-      }
-
-      const visibleCaseIds = await getDirectCaseIdsForUser(actorId);
-
-      if (!visibleCaseIds.includes(caseId)) {
         return res.status(403).json({ error: 'You are not assigned to this case' });
       }
 

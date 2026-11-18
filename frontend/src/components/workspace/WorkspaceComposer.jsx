@@ -29,7 +29,7 @@ export default function WorkspaceComposer({ kind, group, cases, onClose, onSaved
       <p className="workspace-muted">{group.name}</p>
       {error && <p className="workspace-error" role="alert">{error}</p>}
       <label>Title<input autoFocus required maxLength={200} value={form.title} onChange={set('title')} /></label>
-      {kind === 'posts' && (userRole !== 'law_student' || group.leader_id === currentUser.uid) && <label>Post type<select value={form.post_type} onChange={set('post_type')}><option value="discussion">Discussion</option><option value="announcement">Announcement</option></select></label>}
+      {kind === 'posts' && (['admin', 'supervisor'].includes(userRole) || group.leader_id === currentUser.uid) && <label>Post type<select value={form.post_type} onChange={set('post_type')}><option value="discussion">Discussion</option><option value="announcement">Announcement</option></select></label>}
       {kind === 'resources' && <label>Resource link<input type="url" required maxLength={2000} value={form.url} onChange={set('url')} placeholder="https://…" /></label>}
       <label>{kind === 'reflections' ? 'Reflection' : 'Description'}<textarea rows={6} required={['reflections', 'posts'].includes(kind)} maxLength={kind === 'reflections' ? 20000 : 10000} value={form.content} onChange={set('content')} /></label>
       {kind === 'reflections' && <>

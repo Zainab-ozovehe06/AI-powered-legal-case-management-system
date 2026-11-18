@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function activeAdmin() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    match /users/{userId} {
+      allow read: if request.auth != null && (request.auth.uid == userId || activeAdmin());
+      // Preserve existing email/password onboarding. Roles and account updates
+      // are managed only by the authenticated Express admin endpoints.
+      allow create: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'email', 'role', 'status', 'createdAt', 'created_at'])
+        && request.resource.data.uid == userId
+        && request.resource.data.role == 'law_student'
+        && request.resource.data.status == 'active'
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.name is string;
+      allow update, delete: if false;
+    }
+    // All case, assignment, document, AI context and workspace operations use
+    // Express, which verifies live roles and relationships through Admin SDK.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

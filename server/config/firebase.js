@@ -2,9 +2,14 @@ import admin from 'firebase-admin';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load the existing server environment before ESM imports initialise Firebase.
+// Hosting-provided environment variables retain precedence.
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 function formatPrivateKey(privateKey) {
   return privateKey

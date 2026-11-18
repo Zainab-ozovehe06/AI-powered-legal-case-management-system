@@ -20,8 +20,6 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { db } from '../services/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { api } from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
 import EventModal from '../components/calendar/EventModal';
@@ -195,6 +193,8 @@ export default function CaseDetail() {
   const [isDeletingCase, setIsDeletingCase] = useState(false);
 
   const [activities, setActivities] = useState([]);
+  const [recordsRefreshKey, setRecordsRefreshKey] = useState(0);
+  const [recordsError, setRecordsError] = useState('');
   const [documents, setDocuments] = useState([]);
   const [groupReflections, setGroupReflections] = useState([]);
   const [reflectionDraft, setReflectionDraft] = useState({
@@ -309,45 +309,24 @@ export default function CaseDetail() {
 
   useEffect(() => {
     if (!resolvedCaseId) return;
-
-    const q = query(collection(db, 'activities'), where('case_id', '==', resolvedCaseId));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const acts = snapshot.docs.map((docItem) => ({
-        id: docItem.id,
-        ...docItem.data(),
-      }));
-
-      acts.sort(
-        (a, b) =>
-          (getActivityTimestamp(b)?.toMillis?.() || 0) -
-          (getActivityTimestamp(a)?.toMillis?.() || 0)
-      );
-      setActivities(acts);
-    });
-
-    return () => unsubscribe();
-  }, [resolvedCaseId]);
-
-  useEffect(() => {
-    if (!resolvedCaseId) return;
-
-    const q = query(collection(db, 'documents'), where('case_id', '==', resolvedCaseId));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map((docItem) => ({
-        id: docItem.id,
-        ...docItem.data(),
-      }));
-
-      docs.sort(
-        (a, b) => (b.upload_date?.toMillis?.() || 0) - (a.upload_date?.toMillis?.() || 0)
-      );
-      setDocuments(docs);
-    });
-
-    return () => unsubscribe();
-  }, [resolvedCaseId]);
+    let active = true;
+    const timestamp = (value) => value?._seconds || value?.seconds || 0;
+    const refresh = async () => {
+      try {
+        const [acts, docs] = await Promise.all([api.getCaseActivities(resolvedCaseId), api.getCaseDocuments(resolvedCaseId)]);
+        if (!active) return;
+        setActivities(acts.sort((a, b) => timestamp(b.logged_at || b.date) - timestamp(a.logged_at || a.date)));
+        setDocuments(docs.sort((a, b) => timestamp(b.upload_date) - timestamp(a.upload_date)));
+        setRecordsError('');
+      } catch (error) {
+        if (active) { setActivities([]); setDocuments([]); setRecordsError(error.message); }
+      }
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    const interval = window.setInterval(refresh, 30000);
+    return () => { active = false; window.removeEventListener('focus', refresh); window.clearInterval(interval); };
+  }, [resolvedCaseId, recordsRefreshKey]);
 
   useEffect(() => {
     if (userRole !== 'admin') {
@@ -381,8 +360,8 @@ export default function CaseDetail() {
 
     const assignedGroups = caseData.group_assignments || [];
     const canViewReflections =
-      userRole === 'admin' ||
-      assignedGroups.some((group) => Boolean(group.current_user_role));
+      userRole !== 'lawyer' && (userRole === 'admin' ||
+      assignedGroups.some((group) => Boolean(group.current_user_role) || (userRole === 'supervisor' && group.supervisor_id === currentUser?.uid)));
 
     if (!canViewReflections) {
       setGroupReflections([]);
@@ -411,7 +390,7 @@ export default function CaseDetail() {
     return () => {
       isCurrent = false;
     };
-  }, [caseData, resolvedCaseId, userRole]);
+  }, [caseData, resolvedCaseId, userRole, currentUser?.uid]);
 
   const handleAddActivity = async (e) => {
     e.preventDefault();
@@ -424,6 +403,7 @@ export default function CaseDetail() {
         description: newActivity.description,
       });
       setNewActivity({ description: '' });
+      setRecordsRefreshKey((key) => key + 1);
     } catch (err) {
       console.error('Failed to log activity', err);
       alert('Failed to log activity: ' + err.message);
@@ -439,6 +419,7 @@ export default function CaseDetail() {
     setIsUploading(true);
     try {
       await api.uploadDocument(resolvedCaseId, file);
+      setRecordsRefreshKey((key) => key + 1);
     } catch (err) {
       console.error('Upload failed', err);
       alert('Failed to upload document: ' + err.message);
@@ -452,11 +433,6 @@ export default function CaseDetail() {
 
   const handleOpenDocument = async (docItem) => {
     if (!docItem) return;
-
-    if (docItem.storage_provider !== 'local_server' && docItem.file_path) {
-      window.open(docItem.file_path, '_blank', 'noopener,noreferrer');
-      return;
-    }
 
     setOpeningDocumentId(docItem.id);
     try {
@@ -500,6 +476,7 @@ export default function CaseDetail() {
           : currentCase
       );
       setSelectedStatus(savedStatus);
+      setRecordsRefreshKey((key) => key + 1);
     } catch (err) {
       console.error('Failed to update case status', err);
       alert('Failed to update case status: ' + err.message);
@@ -607,6 +584,7 @@ export default function CaseDetail() {
     setSavingActivityId(activityId);
     try {
       await api.updateActivity(resolvedCaseId, activityId, { description });
+      setRecordsRefreshKey((key) => key + 1);
       handleCancelActivityEdit();
     } catch (err) {
       console.error('Failed to update activity', err);
@@ -622,6 +600,7 @@ export default function CaseDetail() {
     setDeletingActivityId(activityId);
     try {
       await api.deleteActivity(resolvedCaseId, activityId);
+      setRecordsRefreshKey((key) => key + 1);
       if (editingActivityId === activityId) {
         handleCancelActivityEdit();
       }
@@ -654,6 +633,7 @@ export default function CaseDetail() {
     setSavingDocumentId(documentId);
     try {
       await api.updateDocument(documentId, { name });
+      setRecordsRefreshKey((key) => key + 1);
       handleCancelDocumentEdit();
     } catch (err) {
       console.error('Failed to update document', err);
@@ -669,6 +649,7 @@ export default function CaseDetail() {
     setDeletingDocumentId(documentId);
     try {
       await api.deleteDocument(documentId);
+      setRecordsRefreshKey((key) => key + 1);
       if (editingDocumentId === documentId) {
         handleCancelDocumentEdit();
       }
@@ -842,8 +823,9 @@ export default function CaseDetail() {
   }
 
   const statusMeta = getStatusMeta(caseData.status);
-  const canUpdateStatus = userRole === 'law_student';
+  const canUpdateStatus = ['law_student', 'lawyer'].includes(userRole);
   const canManageCase = userRole === 'admin' || userRole === 'law_student';
+  const canContribute = ['admin', 'law_student', 'lawyer'].includes(userRole);
   const canDeleteCase = userRole === 'admin';
   const latestActivity = activities[0] || null;
   const latestDocument = documents[0] || null;
@@ -909,6 +891,7 @@ export default function CaseDetail() {
 
   return (
     <div className="case-detail-page animate-fade-in">
+      {recordsError && <p role="alert" className="workspace-error">{recordsError}</p>}
       <section className="case-detail-hero">
         <div className="case-detail-breadcrumbs">
           <Link to="/" className="case-detail-back-link">
@@ -1023,7 +1006,8 @@ export default function CaseDetail() {
 
       <section className="case-detail-shell">
         <div className="case-detail-tab-strip">
-          {tabs.map((tab) => (
+          <Link to={`/assistant?case_id=${encodeURIComponent(resolvedCaseId)}`} className="case-detail-tab-button">AI Assistant</Link>
+          {tabs.filter((tab) => userRole !== 'lawyer' || tab.id !== 'reflections').map((tab) => (
             <button
               key={tab.id}
               type="button"
@@ -1330,8 +1314,8 @@ export default function CaseDetail() {
           )}
 
           {activeTab === 'activity log' && (
-            <div className="case-detail-activity-grid">
-              <article className="case-detail-panel">
+            <div className="case-detail-activity-grid" style={!canContribute ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
+              {canContribute && <article className="case-detail-panel">
                 <div className="case-detail-panel-header">
                   <div>
                     <h2 className="case-detail-panel-title">Log New Activity</h2>
@@ -1395,7 +1379,7 @@ export default function CaseDetail() {
                     </div>
                   </div>
                 </div>
-              </article>
+              </article>}
 
               <article className="case-detail-panel case-detail-panel-large">
                 <div className="case-detail-panel-header">
@@ -1436,7 +1420,7 @@ export default function CaseDetail() {
                                 <span className="case-detail-timeline-time">
                                   {formatDateTime(getActivityTimestamp(activityItem))}
                                 </span>
-                                {!isEditingActivity ? (
+                                {!isEditingActivity && (canManageCase || (userRole === 'lawyer' && activityItem.logged_by_user_id === currentUser?.uid && activityItem.type === 'general_activity')) ? (
                                   <>
                                     <button
                                       type="button"
@@ -1541,8 +1525,8 @@ export default function CaseDetail() {
                 emptyTitle="No scheduled events"
                 emptyCopy="Create an event to track this case deadline or meeting."
                 showCalendarLink
-                onCreate={canManageCase ? handleOpenEventCreate : undefined}
-                onEdit={canManageCase ? handleOpenEventEdit : undefined}
+                onCreate={canContribute ? handleOpenEventCreate : undefined}
+                onEdit={handleOpenEventEdit}
                 refreshKey={eventsRefreshKey}
               />
             </div>
@@ -1700,8 +1684,8 @@ export default function CaseDetail() {
           )}
 
           {activeTab === 'documents' && (
-            <div className="case-detail-document-grid">
-              <article className="case-detail-panel">
+            <div className="case-detail-document-grid" style={!canContribute ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
+              {canContribute && <article className="case-detail-panel">
                 <div className="case-detail-panel-header">
                   <div>
                     <h2 className="case-detail-panel-title">Upload Document</h2>
@@ -1713,6 +1697,7 @@ export default function CaseDetail() {
 
                 <input
                   type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv,.rtf,.png,.jpg,.jpeg"
                   className="case-detail-hidden-input"
                   ref={fileInputRef}
                   onChange={handleFileUpload}
@@ -1743,7 +1728,7 @@ export default function CaseDetail() {
                       </div>
                       <h3 className="case-detail-upload-title">Choose a file to upload</h3>
                       <p className="case-detail-upload-copy">
-                        Click this panel or use the button below to attach a document.
+                        PDF, Office, text, CSV, RTF, PNG or JPEG files up to 5 MB.
                       </p>
                       <button type="button" className="case-detail-primary-button">
                         <Plus size={16} />
@@ -1781,7 +1766,7 @@ export default function CaseDetail() {
                     </div>
                   </div>
                 </div>
-              </article>
+              </article>}
 
               <article className="case-detail-panel case-detail-panel-large">
                 <div className="case-detail-panel-header">
@@ -1888,7 +1873,7 @@ export default function CaseDetail() {
                                   </span>
                                   <ArrowUpRight size={16} />
                                 </button>
-                                <button
+                                {canManageCase && <button
                                   type="button"
                                   onClick={() => handleStartDocumentEdit(docItem)}
                                   disabled={isDeletingDocument}
@@ -1896,8 +1881,8 @@ export default function CaseDetail() {
                                   aria-label="Edit document"
                                 >
                                   <Pencil size={15} />
-                                </button>
-                                <button
+                                </button>}
+                                {canManageCase && <button
                                   type="button"
                                   onClick={() => handleDocumentDelete(docItem.id)}
                                   disabled={isDeletingDocument}
@@ -1912,7 +1897,7 @@ export default function CaseDetail() {
                                   ) : (
                                     <Trash2 size={15} />
                                   )}
-                                </button>
+                                </button>}
                               </>
                             )}
                           </div>
@@ -1931,6 +1916,8 @@ export default function CaseDetail() {
         <EventModal
           isOpen={isEventModalOpen}
           event={selectedCalendarEvent}
+          userRole={userRole}
+          readOnly={userRole === 'supervisor' || (userRole === 'lawyer' && Boolean(selectedCalendarEvent) && selectedCalendarEvent.created_by !== currentUser?.uid)}
           cases={caseData ? [caseData] : []}
           lockedCaseId={resolvedCaseId}
           lockedCaseTitle={getCaseEventTitle(caseData)}

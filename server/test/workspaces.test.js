@@ -27,7 +27,7 @@ test('existing groups immediately become workspaces; membership and supervisor a
   assert.equal((await workspace(h)).status, 200);
   assert.equal((await workspace(h, supervisor)).status, 200);
   assert.equal((await workspace(h, student, 'g2')).status, 403);
-  assert.equal((await workspace(h, { role: 'lawyer', uid: 's1' })).status, 403);
+  assert.equal((await workspace(h, { role: 'lawyer', uid: 's1' })).status, 200);
   assert.equal((await workspace(h, student, 'missing')).status, 404);
   assert.ok(!JSON.stringify((await workspace(h)).body.group).includes('DO NOT EXPOSE'));
   h.table('group_members').delete('g1_s1');
@@ -72,7 +72,7 @@ test('legacy and case-linked reflections never enter community; case access and 
   assert.equal(visible.body.feed.length, 0);
   assert.deepEqual(visible.body.reflections.map((item) => item.id), ['legacy']);
   assert.equal((await workspace(h, otherStudent)).body.reflections.length, 0);
-  assert.equal((await workspace(h, supervisor)).body.reflections.length, 0);
+  assert.equal((await workspace(h, supervisor)).body.reflections.length, 1);
   const body = { title: 'Case report', content: 'Private content', case_id: 'case1' };
   assert.equal((await create(h, 'reflections', { ...body, visibility: 'unit' })).status, 400);
   assert.equal((await create(h, 'reflections', body, otherStudent)).status, 403);
@@ -148,7 +148,7 @@ test('existing case listing intersects explicit group assignments with existing 
   h.table('case_assignments').set('deleted', { case_id: 'deleted-case', group_id: 'g1', assigned_to_type: 'group' });
   assert.deepEqual((await h.request('get', '/', { ...student, query: { group_id: 'g1' } })).body.map((item) => item.id), ['unit-case']);
   assert.equal((await h.request('get', '/', { ...student, query: { group_id: 'g2' } })).body.length, 0);
-  assert.equal((await h.request('get', '/', { ...supervisor, query: { group_id: 'g1' } })).status, 403);
+  assert.deepEqual((await h.request('get', '/', { ...supervisor, query: { group_id: 'g1' } })).body.map((item) => item.id).sort(), ['own-case', 'unit-case']);
   assert.equal((await h.request('get', '/:caseId', { ...student, params: { caseId: 'hidden-case' } })).status, 403);
   assert.equal((await h.request('get', '/', student)).body.length, 2);
 });

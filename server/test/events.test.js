@@ -18,7 +18,7 @@ const seedCases = (h) => {
   h.table('cases').set('case-2', { client_name: 'Other client' });
   h.table('cases').set('deleted-case', { is_deleted: true });
   h.table('case_assignments').set('student', { case_id: 'case-1', user_id: 'student-1' });
-  h.table('case_assignments').set('lawyer', { case_id: 'case-1', user_id: 'lawyer-1' });
+  h.table('case_assignments').set('lawyer', { case_id: 'case-1', user_id: 'lawyer-1', assignment_role: 'lawyer' });
 };
 
 test('all 13 stakeholder types retain their labels and work with and without a case', async () => {
@@ -118,7 +118,7 @@ test('type, status, exact date, date range, case, sorting and limit filters work
   assert.deepEqual(result.body.map((event) => event.id), ['linked']);
 });
 
-test('case assignments, group membership, deleted cases, lawyer read-only and admin-only deletion remain enforced', async () => {
+test('case assignments, group membership, deleted cases, lawyer reminder ownership and admin-only deletion remain enforced', async () => {
   const h = await createHarness();
   seedCases(h);
   h.table('events').set('linked', payload({ case_id: 'case-1' }));
@@ -144,7 +144,7 @@ test('case assignments, group membership, deleted cases, lawyer read-only and ad
   const lawyer = { role: 'lawyer', uid: 'lawyer-1' };
   assert.equal((await h.request('get', '/events/:eventId', { ...lawyer, params })).status, 200);
   assert.equal((await h.request('get', '/events/:eventId', { ...lawyer, params: { eventId: 'hidden' } })).status, 403);
-  assert.equal((await h.request('post', '/events', { ...lawyer, body: payload({ case_id: 'case-1' }) })).status, 403);
+  assert.equal((await h.request('post', '/events', { ...lawyer, body: payload({ case_id: 'case-1' }) })).status, 201);
   assert.equal((await h.request('patch', '/events/:eventId', { ...lawyer, params, body: { title: 'Denied' } })).status, 403);
   assert.equal((await h.request('delete', '/events/:eventId', { ...lawyer, params })).status, 403);
   const student = { role: 'law_student', uid: 'student-1', params };
@@ -241,7 +241,7 @@ test('unit event audiences use live memberships and supervisor assignments in li
   assert.equal(created.status, 201); assert.equal(created.body.event.case_id, null);
   const params = { eventId: created.body.eventId };
   for (const [role, uid, allowed] of [['law_student', 'student-1', true], ['supervisor', 'supervisor-1', true],
-    ['supervisor', 'supervisor-2', false], ['law_student', 'outsider', false], ['lawyer', 'student-1', false]]) {
+    ['supervisor', 'supervisor-2', false], ['law_student', 'outsider', false], ['lawyer', 'student-1', true]]) {
     const user = { role, uid };
     assert.equal((await h.request('get', '/events', user)).body.length, allowed ? 1 : 0);
     assert.equal((await h.request('get', '/events/:eventId', { ...user, params })).status, allowed ? 200 : 403);

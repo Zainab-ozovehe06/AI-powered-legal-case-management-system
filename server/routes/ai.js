@@ -7,18 +7,20 @@ import { db } from '../config/firebase.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import {
   getActorId,
-  getGroupIdsForUser,
-  getVisibleCaseIdsForStudent,
   isCaseAssignedToGroup,
   isCaseDeleted,
   normalizeText,
 } from '../utils/groupCollaboration.js';
+import { getSupervisionScope, getVisibleCaseIds } from '../utils/caseAccess.js';
+import { readStoredDocument } from '../utils/documentStorage.js';
+import { getWorkspaceGroupIds } from '../utils/unitWorkspace.js';
+import allowRoles from '../middleware/allowRoles.js';
+import { canViewCaseEventAudience } from '../utils/eventAccess.js';
 
 const router = express.Router();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadsRoot = path.resolve(__dirname, '..', 'uploads');
 const defaultClinicResourceRoot = path.resolve(
   __dirname,
   '..',
@@ -135,17 +137,6 @@ const getReferenceMimeType = ({ mimetype, originalname, document_type, name } = 
   }
 
   return null;
-};
-
-const resolveUploadPath = (relativePath) => {
-  const absolutePath = path.resolve(uploadsRoot, path.normalize(relativePath || ''));
-  const relativeToRoot = path.relative(uploadsRoot, absolutePath);
-
-  if (relativeToRoot.startsWith('..') || path.isAbsolute(relativeToRoot)) {
-    throw new Error('Invalid document path');
-  }
-
-  return absolutePath;
 };
 
 const resolveClinicResourcePath = (relativePath) => {
@@ -284,8 +275,8 @@ const getVisibleCases = async (currentUser) => {
     );
   }
 
-  if (currentUser.role === 'law_student') {
-    const caseIds = await getVisibleCaseIdsForStudent(actorId);
+  if (['law_student', 'lawyer', 'supervisor'].includes(currentUser.role)) {
+    const caseIds = await getVisibleCaseIds(currentUser);
 
     if (!caseIds.length) return [];
 
@@ -319,10 +310,9 @@ const sortByRecent = (items, timestampFields) =>
 
 const getAuthorizedReflectionGroupIds = async (caseId, currentUser) => {
   if (currentUser.role === 'admin') return null;
-  if (currentUser.role !== 'law_student') return [];
+  if (!['law_student', 'supervisor'].includes(currentUser.role)) return [];
 
-  const actorId = currentUser?.uid || currentUser?.user_id;
-  const userGroupIds = await getGroupIdsForUser(actorId);
+  const userGroupIds = await getWorkspaceGroupIds(currentUser);
   const assignmentChecks = await Promise.all(
     userGroupIds.map(async (groupId) => ({
       groupId,
@@ -336,6 +326,7 @@ const getAuthorizedReflectionGroupIds = async (caseId, currentUser) => {
 };
 
 const getRelatedRecordsByCase = async (cases, currentUser) => {
+  const supervision = currentUser.role === 'supervisor' ? await getSupervisionScope(currentUser) : null;
   const entries = await Promise.all(
     cases.map(async (caseItem) => {
       const caseId = caseItem.id;
@@ -357,9 +348,11 @@ const getRelatedRecordsByCase = async (cases, currentUser) => {
         .map(serializeDoc)
         .filter(
           (reflection) =>
-            !authorizedReflectionGroupIds ||
-            authorizedReflectionGroupIds.includes(reflection.group_id)
+            (!authorizedReflectionGroupIds || authorizedReflectionGroupIds.includes(reflection.group_id)) &&
+            (!supervision || supervision.studentIdsByGroup.get(reflection.group_id)?.includes(reflection.submitted_by))
         );
+      const events = eventsSnap.docs.map(serializeDoc);
+      const eventAudiences = await Promise.all(events.map((event) => canViewCaseEventAudience(event, currentUser)));
 
       return [
         caseId,
@@ -373,7 +366,7 @@ const getRelatedRecordsByCase = async (cases, currentUser) => {
             'upload_date',
             'created_at',
           ]),
-          events: sortByRecent(eventsSnap.docs.map(serializeDoc), [
+          events: sortByRecent(events.filter((_event, index) => eventAudiences[index]), [
             'date',
             'created_at',
           ]),
@@ -847,20 +840,19 @@ const buildStoredDocumentReferenceParts = async ({
     const { caseItem, document } = candidate;
     const mimeType = getReferenceMimeType(document);
 
-    if (!mimeType || !document.server_file_path) continue;
+    if (!mimeType) continue;
 
     try {
-      const absolutePath = resolveUploadPath(document.server_file_path);
-      const fileStats = await fs.stat(absolutePath);
+      const fileSize = Number(document.size) || 0;
 
       if (
-        storedBytes + fileStats.size > MAX_STORED_DOCUMENT_BYTES ||
-        existingInlineBytes + storedBytes + fileStats.size > MAX_TOTAL_INLINE_BYTES
+        storedBytes + fileSize > MAX_STORED_DOCUMENT_BYTES ||
+        existingInlineBytes + storedBytes + fileSize > MAX_TOTAL_INLINE_BYTES
       ) {
         continue;
       }
 
-      const buffer = await fs.readFile(absolutePath);
+      const buffer = await readStoredDocument(document, Math.min(MAX_STORED_DOCUMENT_BYTES - storedBytes, MAX_TOTAL_INLINE_BYTES - existingInlineBytes - storedBytes));
       storedBytes += buffer.length;
 
       parts.push({
@@ -893,7 +885,7 @@ const buildStoredDocumentReferenceParts = async ({
   return { parts, references };
 };
 
-router.post('/assistant', requireAuth, upload.array('references', MAX_UPLOAD_FILES), async (req, res) => {
+router.post('/assistant', requireAuth, allowRoles('admin', 'law_student', 'lawyer', 'supervisor'), upload.array('references', MAX_UPLOAD_FILES), async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
@@ -926,7 +918,13 @@ router.post('/assistant', requireAuth, upload.array('references', MAX_UPLOAD_FIL
       });
     }
 
-    const visibleCases = await getVisibleCases(req.currentUser);
+    let visibleCases = await getVisibleCases(req.currentUser);
+    const requestedCaseId = normalizeText(req.body?.case_id);
+    if (requestedCaseId) {
+      const selected = visibleCases.find((item) => item.id === requestedCaseId);
+      if (!selected) return res.status(403).json({ error: 'You are not authorised to use this case with the assistant' });
+      visibleCases = [selected];
+    }
     const related = await getRelatedRecordsByCase(visibleCases, req.currentUser);
     const selectedCases = selectRelevantCases(prompt, visibleCases, related);
     const databaseContext = buildDatabaseContext({

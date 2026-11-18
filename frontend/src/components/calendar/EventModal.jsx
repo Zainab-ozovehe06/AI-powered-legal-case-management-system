@@ -45,7 +45,7 @@ export default function EventModal({
   onDelete,
 }) {
   const [form, setForm] = useState(() =>
-    buildInitialForm({ event, defaultDate, lockedCaseId, lockedGroupId })
+    buildInitialForm({ event, defaultDate, lockedCaseId: lockedCaseId || (userRole === 'lawyer' && !event ? cases[0]?.id : ''), lockedGroupId })
   );
 
   const caseOptions = useMemo(() => {
@@ -103,8 +103,8 @@ export default function EventModal({
         <form onSubmit={handleSubmit} className="event-modal-form">
           <label className="event-form-field event-form-field-wide">
             <span className="event-form-label">Activity category</span>
-            <select className="event-form-input" value={form.category} disabled={readOnly || Boolean(lockedCaseId)} onChange={(event) => setForm({ ...form, category: event.target.value, case_id: '', visibility: form.group_id ? 'unit' : 'private' })}>
-              <option value="general">Clinic / unit event</option><option value="case">Case-related reminder</option>
+            <select className="event-form-input" value={form.category} disabled={readOnly || Boolean(lockedCaseId) || userRole === 'lawyer'} onChange={(event) => setForm({ ...form, category: event.target.value, case_id: '', visibility: form.group_id ? 'unit' : 'private' })}>
+              <option value="general">Clinic / unit event</option><option value="case" disabled={userRole === 'supervisor'}>Case-related reminder</option>
             </select>
           </label>
           <label className="event-form-field event-form-field-wide">

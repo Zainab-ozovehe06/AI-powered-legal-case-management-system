@@ -178,6 +178,7 @@ const AssistantDocument = ({ document, references, model }) => {
 
 export default function LegalAssistant() {
   const location = useLocation();
+  const caseId = new URLSearchParams(location.search).get('case_id') || '';
   const [draft, setDraft] = useState('');
   const [files, setFiles] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -267,6 +268,7 @@ export default function LegalAssistant() {
         files: attachedFiles,
         conversation: messages.map(getMessageForConversation),
         contextPath: location.pathname,
+        caseId,
       });
 
       setMessages((currentMessages) => [
@@ -435,7 +437,7 @@ export default function LegalAssistant() {
 
           <div className="ai-composer-footnote">
             <MessageSquare size={14} />
-            <span>Stored case records are included automatically.</span>
+            <span>{caseId ? 'Only this authorised case is included. AI responses are advisory.' : 'Your authorised case records are included automatically.'}</span>
           </div>
         </form>
       </section>

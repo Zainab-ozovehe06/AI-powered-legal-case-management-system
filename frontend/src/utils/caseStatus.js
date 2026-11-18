@@ -1,7 +1,7 @@
 export const CASE_STATUS_STEPS = [
   { value: 'open', label: 'OPEN', displayLabel: 'Open' },
   { value: 'incourt', label: 'INCOURT', displayLabel: 'In Court' },
-  {value: 'court_date', label: 'AWAITING HEARING', displayLabel:'awaiting hearing'},
+  { value: 'awaiting_hearing', label: 'AWAITING HEARING', displayLabel: 'Awaiting Hearing' },
   { value: 'pending', label: 'PENDING', displayLabel: 'Pending' },
   { value: 'closed', label: 'CLOSED', displayLabel: 'Closed' },
 ];
@@ -14,6 +14,8 @@ const STATUS_ALIASES = {
   incourt: 'incourt',
   court: 'incourt',
   hearing: 'incourt',
+  awaitinghearing: 'awaiting_hearing',
+  courtdate: 'awaiting_hearing',
   trial: 'incourt',
   pending: 'pending',
   active: 'pending',

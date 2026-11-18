@@ -3,7 +3,6 @@ import { admin, db } from '../config/firebase.js';
 import {
   requireAdminRole,
   requireAuth,
-  requireStudentRole,
 } from '../middleware/authenticate.js';
 import {
   getActorId,
@@ -14,7 +13,10 @@ import {
   normalizeText,
   serializeGroup,
   assertLawStudentUser,
+  assertGroupMemberUser,
 } from '../utils/groupCollaboration.js';
+import allowRoles from '../middleware/allowRoles.js';
+import { loadWorkspace, publicGroupProfiles } from '../utils/unitWorkspace.js';
 
 const router = express.Router();
 
@@ -33,8 +35,9 @@ const getGroupOr404 = async (groupId) => {
 };
 
 const validateLawStudentIds = async (userIds) => {
+  // Retain the existing helper/route flow; regular members can now be lawyers.
   const uniqueUserIds = normalizeIdArray(userIds);
-  const users = await Promise.all(uniqueUserIds.map(assertLawStudentUser));
+  const users = await Promise.all(uniqueUserIds.map(assertGroupMemberUser));
 
   return users;
 };
@@ -132,7 +135,7 @@ router.get('/', requireAuth, requireAdminRole, async (req, res) => {
 });
 
 // GET /api/groups/my-groups
-router.get('/my-groups', requireAuth, requireStudentRole, async (req, res) => {
+router.get('/my-groups', requireAuth, allowRoles('law_student', 'lawyer'), async (req, res) => {
   try {
     const actorId = getActorId(req);
 
@@ -154,7 +157,7 @@ router.get('/my-groups', requireAuth, requireStudentRole, async (req, res) => {
     const groups = await Promise.all(
       groupDocs
         .filter((groupDoc) => groupDoc.exists)
-        .map((groupDoc) => serializeGroup(groupDoc, actorId))
+        .map(async (groupDoc) => publicGroupProfiles(await serializeGroup(groupDoc, actorId)))
     );
 
     groups.sort((a, b) => a.name.localeCompare(b.name));
@@ -177,14 +180,11 @@ router.get('/:groupId', requireAuth, async (req, res) => {
     }
 
     if (req.currentUser.role !== 'admin') {
-      const membership = await getMembership(groupId, actorId);
-
-      if (!membership) {
-        return res.status(403).json({ error: 'You are not a member of this group' });
-      }
+      await loadWorkspace(groupId, req.currentUser);
     }
 
-    return res.status(200).json(await serializeGroup(groupDoc, actorId));
+    const group = await serializeGroup(groupDoc, actorId);
+    return res.status(200).json(req.currentUser.role === 'admin' ? group : publicGroupProfiles(group));
   } catch (error) {
     return handleRouteError(res, error, 'Failed to fetch group');
   }

@@ -160,12 +160,12 @@ router.patch(
       }
 
       const invalidStudentIds = studentDocs
-        .filter((studentDoc) => studentDoc.data()?.role !== 'law_student')
+        .filter((studentDoc) => !['law_student', 'lawyer'].includes(studentDoc.data()?.role))
         .map((studentDoc) => studentDoc.id);
 
       if (invalidStudentIds.length) {
         return res.status(400).json({
-          error: 'Group members must have role law_student',
+          error: 'Group members must be law students or lawyers',
           invalidStudentIds,
         });
       }
@@ -184,6 +184,7 @@ router.patch(
       });
 
       studentDocs.forEach((studentDoc) => {
+        if (studentDoc.data().role !== 'law_student') return;
         batch.update(studentDoc.ref, {
           group_id: groupId,
           group_name: groupName,
@@ -201,7 +202,7 @@ router.patch(
         message: 'Supervisor assigned to group successfully',
         groupId,
         supervisorId,
-        updatedStudentsCount: studentDocs.length,
+        updatedStudentsCount: studentDocs.filter((doc) => doc.data().role === 'law_student').length,
       });
     } catch (error) {
       console.error('Failed to assign supervisor to group', error);

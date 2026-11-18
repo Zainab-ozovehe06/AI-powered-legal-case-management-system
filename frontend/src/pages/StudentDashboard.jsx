@@ -28,7 +28,8 @@ const formatLabel = (value, fallback) => {
 };
 
 export default function StudentDashboard() {
-  const { currentUser } = useAuth();
+  const { currentUser, userRole } = useAuth();
+  const isLawyer = userRole === 'lawyer';
 
   const [loading, setLoading] = useState(true);
   const [cases, setCases] = useState([]);
@@ -135,9 +136,10 @@ export default function StudentDashboard() {
   return (
     <div className="student-dashboard-page animate-fade-in">
       <div className="student-dashboard-hero">
+        {isLawyer && <p className="workspace-eyebrow">Lawyer Dashboard</p>}
         <h1 className="student-dashboard-title">Welcome back, {firstName}</h1>
         <p className="student-dashboard-subtitle">
-          Here&apos;s your case overview for today.
+          {isLawyer ? 'Your assigned cases, appointments and deadlines.' : "Here's your case overview for today."}
         </p>
       </div>
 
@@ -179,7 +181,7 @@ export default function StudentDashboard() {
                   <div className="student-empty-state">
                     <p className="student-empty-title">No cases yet</p>
                     <p className="student-empty-copy">
-                      Create or get assigned to a case to see it here.
+                      {isLawyer ? 'Cases will appear here when an administrator assigns you.' : 'Create or get assigned to a case to see it here.'}
                     </p>
                   </div>
                 ) : (

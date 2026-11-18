@@ -3,7 +3,7 @@
 // Both servers bind to loopback and are closed before the script exits.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { createHarness } from './routerHarness.js';
@@ -13,17 +13,22 @@ const requireFrontend = createRequire(new URL('../../frontend/package.json', imp
 const { createServer } = await import(new URL('../../frontend/node_modules/vite/dist/node/index.js', import.meta.url));
 const puppeteer = requireFrontend('puppeteer');
 const react = (await import(new URL('../../frontend/node_modules/@vitejs/plugin-react/dist/index.js', import.meta.url))).default;
-const harnesses = await Promise.all(['workspaces', 'events', 'cases'].map((name) => createHarness(name)));
+const tables = new Map();
+const harnesses = await Promise.all(['workspaces', 'events', 'cases', 'documents'].map((name) => createHarness(name, tables)));
 const date = '2099-11-12';
 for (const h of harnesses) {
   h.table('groups').set('g1', { name: 'Human Rights Unit', description: 'Advancing access to justice through research, advocacy and community action.', leader_id: 's1', supervisor_id: 'sup1', supervisor_name: 'Dr. Amina Yusuf', status: 'active' });
   h.table('groups').set('g2', { name: 'Migration Law Unit', supervisor_id: 'sup2', status: 'active' });
-  for (const [id, name, role] of [['s1', 'Ada Okafor', 'law_student'], ['s2', 'Emeka Bello', 'law_student'], ['sup1', 'Dr. Amina Yusuf', 'supervisor']]) {
-    h.table('users').set(id, { name, role, email: `${id}@clinic.test` });
-    if (role === 'law_student') h.table('group_members').set(`g1_${id}`, { group_id: 'g1', user_id: id, role_in_group: id === 's1' ? 'leader' : 'member', joined_at: { _seconds: 1790000000 } });
+  for (const [id, name, role] of [['s1', 'Ada Okafor', 'law_student'], ['s2', 'Emeka Bello', 'law_student'], ['sup1', 'Dr. Amina Yusuf', 'supervisor'], ['l1', 'Aisha Musa', 'lawyer']]) {
+    h.table('users').set(id, { name, role, email: `${id}@clinic.test`, status: 'active' });
+    if (['law_student', 'lawyer'].includes(role)) h.table('group_members').set(`g1_${id}`, { group_id: 'g1', user_id: id, role_in_group: id === 's1' ? 'leader' : 'member', joined_at: { _seconds: 1790000000 } });
   }
   h.table('cases').set('case1', { client_name: 'Authorised clinic client', offence: 'Case research', case_type: 'Civil', status: 'open' });
   h.table('case_assignments').set('a1', { case_id: 'case1', group_id: 'g1', assigned_to_type: 'group' });
+  h.table('case_assignments').set('lawyer', { case_id: 'case1', user_id: 'l1', assigned_to_type: 'user', assignment_role: 'lawyer' });
+  h.table('cases').set('group-only', { client_name: 'Group-only client', status: 'open', case_type: 'Civil' });
+  h.table('case_assignments').set('group-only', { case_id: 'group-only', group_id: 'g1', assigned_to_type: 'group' });
+  h.table('activities').set('student-note', { case_id: 'case1', description: 'Student case progress', logged_by_user_id: 's1', type: 'general_activity', logged_at: { _seconds: 1793100000 } });
   h.table('group_posts').set('welcome', { group_id: 'g1', title: 'Welcome to our workspace', content: 'Share your progress and questions here before our next unit meeting.', author_name: 'Dr. Amina Yusuf', created_by: 'sup1', post_type: 'announcement', created_at: { _seconds: 1793100000 } });
   h.table('group_reflections').set('reflection1', { group_id: 'g1', title: 'Community outreach reflections', content: 'Our team explored practical ways to improve access to legal support.', author_name: 'Emeka Bello', submitted_by: 's2', visibility: 'unit', status: 'submitted', submitted_at: { _seconds: 1793090000 } });
   h.table('group_reflections').set('private', { group_id: 'g1', title: 'PRIVATE REFLECTION MUST STAY HIDDEN', content: 'Private learning', submitted_by: 's2', visibility: 'restricted' });
@@ -38,12 +43,13 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   const role = req.headers.authorization?.split(' ')[1] || 'law_student';
-  req.currentUser = { uid: role === 'supervisor' ? 'sup1' : role === 'admin' ? 'admin1' : 's1', role, name: role === 'supervisor' ? 'Dr. Amina Yusuf' : 'Ada Okafor' };
+  req.currentUser = { uid: role === 'supervisor' ? 'sup1' : role === 'admin' ? 'admin1' : role === 'lawyer' ? 'l1' : 's1', role, name: role === 'supervisor' ? 'Dr. Amina Yusuf' : 'Ada Okafor' };
   next();
 });
 app.use('/api/groups', harnesses[0].router);
 app.use('/api', harnesses[1].router);
 app.use('/api/cases', harnesses[2].router);
+app.use('/api/documents', harnesses[3].router);
 const apiServer = app.listen(0, '127.0.0.1');
 await new Promise((resolve) => apiServer.once('listening', resolve));
 const apiPort = apiServer.address().port;
@@ -53,7 +59,7 @@ const vite = await createServer({
   plugins: [{ name: 'offline-workspace-test-auth', enforce: 'pre', load(id) {
     if (id.replaceAll('\\', '/').endsWith('/src/context/AuthContext.jsx')) return `
       const role = localStorage.getItem('smoke-role') || 'law_student';
-      export const useAuth = () => ({ currentUser: { uid: role === 'supervisor' ? 'sup1' : role === 'admin' ? 'admin1' : 's1', name: 'Ada Okafor', displayName: 'Ada Okafor', role }, userRole: role, loading: false, logout: () => {} });
+      export const useAuth = () => ({ currentUser: { uid: role === 'supervisor' ? 'sup1' : role === 'admin' ? 'admin1' : role === 'lawyer' ? 'l1' : 's1', name: 'Ada Okafor', displayName: 'Ada Okafor', role }, userRole: role, loading: false, logout: () => {} });
       export const AuthProvider = ({ children }) => children;
     `;
     if (id.replaceAll('\\', '/').endsWith('/src/services/firebase.js')) return `export const auth = { currentUser: { getIdToken: async () => localStorage.getItem('smoke-role') || 'law_student' } }; export const db = {};`;
@@ -147,7 +153,7 @@ try {
   }
   await page.evaluate(() => localStorage.setItem('smoke-role', 'supervisor'));
   await page.goto(`${url}/`, { waitUntil: 'networkidle0' });
-  await waitText('Your units');
+  await waitText('Supervisor Dashboard');
   assert.ok(!(await page.content()).includes('Migration Law Unit'));
   await page.goto(`${url}/units/g1/reports`, { waitUntil: 'networkidle0' });
   await waitText('PRIVATE REFLECTION MUST STAY HIDDEN'); // Assigned reviewer can read restricted unit reports.
@@ -157,10 +163,63 @@ try {
   await page.waitForSelector('.workspace-feedback');
   assert.ok([...harnesses[0].table('group_reflections').values()].some((report) => report.status === 'reviewed' && report.supervisor_feedback === 'Reviewed in the browser smoke test.'));
   await page.keyboard.press('Escape');
+  await page.goto(`${url}/units/g1/activities`, { waitUntil: 'networkidle0' });
+  await waitText('Student case progress');
+  await page.goto(`${url}/units/g1/cases`, { waitUntil: 'networkidle0' });
+  await waitText('Authorised clinic client');
+  await page.goto(`${url}/cases/case1`, { waitUntil: 'networkidle0' });
+  await waitText('Matter Brief');
+  assert.equal(await page.$('.case-detail-status-form'), null);
+  const openCaseTab = async (title) => {
+    const tab = await page.waitForFunction((title) => [...document.querySelectorAll('button.case-detail-tab-button')].find((item) => item.textContent.startsWith(title)), {}, title);
+    await tab.asElement().click();
+  };
+  await openCaseTab('Activity Log');
+  await waitText('Student case progress');
+  assert.equal(await page.$('#activityDesc'), null);
+  assert.equal(await page.$('button[aria-label="Edit activity"]'), null);
+  await openCaseTab('Documents');
+  assert.equal(await page.$('.case-detail-upload-dropzone'), null);
+  await page.screenshot({ path: fileURLToPath(new URL('supervisor-case.png', artifacts)), fullPage: true });
+  await page.evaluate(() => localStorage.setItem('smoke-role', 'lawyer'));
+  await page.goto(`${url}/`, { waitUntil: 'networkidle0' });
+  await waitText('Lawyer Dashboard'); await waitText('Authorised clinic client');
+  assert.ok(!(await page.content()).includes('Group-only client'));
+  await page.goto(`${url}/cases/case1`, { waitUntil: 'networkidle0' });
+  await page.waitForSelector('#case-status-select');
+  await page.select('#case-status-select', 'pending');
+  await page.click('.case-detail-status-form button');
+  await page.waitForFunction(() => document.querySelector('.case-detail-status-pill')?.textContent.trim() === 'PENDING');
+  assert.equal(harnesses[2].table('cases').get('case1').status, 'pending');
+  assert.ok((await page.$eval('a[href^="/assistant?case_id="]', (element) => element.href)).endsWith('case_id=case1'));
+  await openCaseTab('Activity Log');
+  await fill('#activityDesc', 'Lawyer browser activity');
+  await clickText('button', 'Log Activity');
+  await page.waitForFunction(() => document.querySelector('.case-detail-timeline')?.textContent.includes('Lawyer browser activity'));
+  await openCaseTab('Documents');
+  const evidencePath = fileURLToPath(new URL('evidence.pdf', artifacts));
+  await writeFile(evidencePath, '%PDF-1.7\nBrowser fixture');
+  const filePicker = await page.$('input[type="file"]');
+  await filePicker.uploadFile(evidencePath);
+  await waitText('evidence.pdf');
+  assert.equal(await page.$('button[aria-label="Edit document"]'), null);
+  assert.ok([...harnesses[3].table('documents').values()].some((doc) => doc.storage_provider === 'firebase_storage' && doc.uploaded_by_user_id === 'l1'));
+  await openCaseTab('Schedule');
+  await clickText('button', 'New');
+  await fill('.event-modal input[type="text"]', 'Lawyer browser reminder');
+  await clickText('button', 'Save Event');
+  await page.waitForFunction(() => !document.querySelector('.event-modal'));
+  await waitText('Lawyer browser reminder');
+  await page.goto(`${url}/units/g1/members`, { waitUntil: 'networkidle0' });
+  await waitText('Lawyer member');
+  await page.screenshot({ path: fileURLToPath(new URL('lawyer-unit.png', artifacts)), fullPage: true });
+  await page.goto(`${url}/cases/group-only`, { waitUntil: 'networkidle0' });
+  await waitText('Case not found.');
+  await page.evaluate(() => localStorage.setItem('smoke-role', 'supervisor'));
   await page.goto(`${url}/units/g2/overview`, { waitUntil: 'networkidle0' });
   await waitText('Workspace unavailable');
   assert.deepEqual(errors, []);
-  console.log('Workspace browser smoke passed: pages, posts, comments, report submission/revision/review, task updates, events, supervisor scope, desktop/tablet/mobile.');
+  console.log('Browser smoke passed: student workspaces, reports/review, tasks, scheduling, supervisor activity and read-only cases, lawyer dashboard/status/activity/upload/reminders/membership, unassigned-case denial, desktop/tablet/mobile.');
 } finally {
   await browser?.close(); await vite.close(); await new Promise((resolve) => apiServer.close(resolve));
 }

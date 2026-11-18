@@ -9,7 +9,7 @@ const UnitsContext = createContext({ units: [], loading: true, error: '' });
 export function UnitsProvider({ children }) {
   const { currentUser, userRole } = useAuth();
   const [state, setState] = useState({ units: [], loading: true, error: '' });
-  const fetchUnits = useCallback(() => ['admin', 'law_student', 'supervisor'].includes(userRole)
+  const fetchUnits = useCallback(() => ['admin', 'law_student', 'supervisor', 'lawyer'].includes(userRole)
     ? api.getWorkspaces() : Promise.resolve([]), [userRole]);
   const refresh = useCallback(async () => {
     try {

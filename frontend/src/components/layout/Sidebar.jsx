@@ -44,10 +44,12 @@ export const Sidebar = ({ collapsed, setCollapsed }) => {
   const lawyerNavItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
     { name: 'Case Management', path: '/cases', icon: <FolderOpen size={20} /> },
+    { name: 'Calendar', path: '/calendar', icon: <CalendarDays size={20} /> },
     { name: 'Clinic AI', path: '/assistant', icon: <MessageSquare size={20} /> },
   ];
   const supervisorNavItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
+    { name: 'Student Cases', path: '/cases', icon: <FolderOpen size={20} /> },
     { name: 'Calendar', path: '/calendar', icon: <CalendarDays size={20} /> },
     { name: 'Clinic AI', path: '/assistant', icon: <MessageSquare size={20} /> },
   ];
@@ -61,7 +63,7 @@ export const Sidebar = ({ collapsed, setCollapsed }) => {
   const sidebarClassName = [
     'sidebar',
     userRole === 'admin' ? 'admin-sidebar' : '',
-    userRole === 'law_student' ? 'student-initial-sidebar' : '',
+    ['law_student', 'lawyer'].includes(userRole) ? 'student-initial-sidebar' : '',
     collapsed ? 'collapsed' : '',
   ]
     .filter(Boolean)
@@ -91,7 +93,7 @@ export const Sidebar = ({ collapsed, setCollapsed }) => {
             <span className="sidebar-text">{item.name}</span>
           </NavLink>
         ))}
-        {['admin', 'law_student', 'supervisor'].includes(userRole) && <>
+        {['admin', 'law_student', 'supervisor', 'lawyer'].includes(userRole) && <>
           <NavLink to="/units" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title={collapsed ? 'Units' : ''}>
             <Library size={20} /><span className="sidebar-text">Units</span>
           </NavLink>

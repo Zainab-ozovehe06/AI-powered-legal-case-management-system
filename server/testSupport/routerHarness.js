@@ -2,13 +2,25 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import express from 'express';
+import { fileURLToPath } from 'node:url';
 
 // Run real Express handlers and permission helpers against an isolated Firestore
 // double. No Firebase credentials or production records are used.
-export async function createHarness(routerName = 'events', sharedTables = new Map()) {
+const sequences = new WeakMap();
+export async function createHarness(routerName = 'events', sharedTables = new Map(), options = {}) {
   const tables = sharedTables;
   const reads = [];
-  let nextId = 0;
+  const storedFiles = new Map();
+  const storageCalls = [];
+  const tokenChecks = [];
+  const storage = { bucket: () => ({ name: 'test-bucket', file: (name) => ({
+    async save(buffer, config) { storageCalls.push(['save', name, config]); storedFiles.set(name, Buffer.from(buffer)); },
+    async getMetadata() { storageCalls.push(['metadata', name]); if (!storedFiles.has(name)) throw Object.assign(new Error('Not found'), { code: 404 }); return [{ size: storedFiles.get(name).length }]; },
+    async download() { storageCalls.push(['download', name]); return [storedFiles.get(name)]; },
+    async delete() { storageCalls.push(['delete', name]); storedFiles.delete(name); },
+  }) }) };
+  if (!sequences.has(tables)) sequences.set(tables, { nextId: 0 });
+  const sequence = sequences.get(tables);
   let timestamp = 1793203200;
   const table = (name) => {
     if (!tables.has(name)) tables.set(name, new Map());
@@ -29,7 +41,7 @@ export async function createHarness(routerName = 'events', sharedTables = new Ma
         .filter((id) => filters.every(([field, value]) => table(name).get(id)[field] === value))
         .map((id) => snapshot(name, id)) };
     },
-    doc(id = `test-${++nextId}`) {
+    doc(id = `test-${++sequence.nextId}`) {
       return {
         id,
         async get() { reads.push(name); return snapshot(name, id); },
@@ -55,37 +67,48 @@ export async function createHarness(routerName = 'events', sharedTables = new Ma
       };
     },
   };
+  const context = vm.createContext({
+    URL, Buffer, structuredClone, console: { ...console, error() {} },
+    process: { env: { GEMINI_API_KEY: 'isolated-test-key', LAW_CLINIC_RESOURCE_DIR: fileURLToPath(new URL('./missing-test-resources/', import.meta.url)) } },
+    fetch: options.fetch || (() => { throw new Error('Network access is disabled in tests'); }),
+  });
   const synthetic = (exports) => new vm.SyntheticModule(Object.keys(exports), function () {
     Object.entries(exports).forEach(([name, value]) => this.setExport(name, value));
-  });
+  }, { context });
   const stubAuth = (_req, _res, next) => next();
   const requireRole = (role) => (req, res, next) => req.currentUser.role === role ? next() : res.status(403).json({ error: 'Access denied' });
   const modules = new Map();
   const base = new URL('../', import.meta.url);
-  modules.set(new URL('config/firebase.js', base).href, synthetic({ db,
+  modules.set(new URL('config/firebase.js', base).href, synthetic({ db, storage,
+    auth: { async verifyIdToken(token, checkRevoked) { tokenChecks.push({ token, checkRevoked }); if (token !== 'valid') throw new Error('Invalid token'); return { uid: options.authUid || 'lawyer-1' }; } },
     admin: { firestore: { FieldValue: { serverTimestamp: () => ({ _seconds: ++timestamp }) } } },
   }));
-  modules.set(new URL('middleware/authenticate.js', base).href, synthetic({ requireAuth: stubAuth,
+  if (!options.realAuth) modules.set(new URL('middleware/authenticate.js', base).href, synthetic({ requireAuth: stubAuth,
     requireAdminRole: requireRole('admin'), requireStudentRole: requireRole('law_student') }));
   modules.set('express', synthetic({ default: express }));
   const moduleFor = async (url) => {
-    if (!modules.has(url)) modules.set(url, readFile(new URL(url), 'utf8').then((source) => new vm.SourceTextModule(source, { identifier: url })));
+    if (!modules.has(url)) {
+      if (!url.startsWith('file:')) modules.set(url, import(url).then((exports) => synthetic(exports)));
+      else modules.set(url, readFile(new URL(url), 'utf8').then((source) => new vm.SourceTextModule(source, { identifier: url, context, initializeImportMeta(meta) { meta.url = url; } })));
+    }
     return modules.get(url);
   };
   const routerModule = await moduleFor(new URL(`routes/${routerName}.js`, base).href);
-  await routerModule.link(async (specifier, reference) => moduleFor(specifier === 'express' ? 'express' : new URL(specifier, reference.identifier).href));
+  await routerModule.link(async (specifier, reference) => moduleFor(specifier.startsWith('.') ? new URL(specifier, reference.identifier).href : specifier));
   await routerModule.evaluate();
   const router = routerModule.namespace.default;
   return {
-    table, tables, reads, router,
-    async request(method, path, { role = 'admin', uid = 'admin-1', body = {}, params = {}, query: requestQuery = {} } = {}) {
+    table, tables, reads, router, storedFiles, storageCalls, tokenChecks,
+    async request(method, path, { role = 'admin', uid = 'admin-1', body = {}, params = {}, query: requestQuery = {}, headers = {}, file, files } = {}) {
       const route = router.stack.find((layer) => layer.route?.path === path && layer.route.methods[method]);
       assert.ok(route, `${method} ${path} must exist`);
-      const req = { currentUser: { role, uid, name: uid }, body, params, query: requestQuery };
+      const req = { currentUser: { role, uid, name: uid }, body, params, query: requestQuery, headers, file, files };
       const res = {
         statusCode: 200,
         status(code) { this.statusCode = code; return this; },
         json(data) { this.body = JSON.parse(JSON.stringify(data)); return this; },
+        setHeader() {},
+        send(data) { this.body = data; return this; },
       };
       const originalError = console.error;
       console.error = () => {};
@@ -94,7 +117,10 @@ export async function createHarness(routerName = 'events', sharedTables = new Ma
           const layer = route.route.stack[index];
           if (!layer) return;
           let following;
-          await layer.handle(req, res, () => { following = run(index + 1); });
+          await layer.handle(req, res, (error) => {
+            if (error) { res.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : error.statusCode || 400).json({ error: error.message }); return; }
+            following = run(index + 1);
+          });
           if (following) await following;
         };
         await run(0);

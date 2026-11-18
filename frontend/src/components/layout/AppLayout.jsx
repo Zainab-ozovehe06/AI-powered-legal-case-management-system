@@ -14,7 +14,7 @@ export const AppLayout = () => {
     return <Navigate to="/login" replace />;
   }
 
-  const isStudentPortalView = userRole === 'law_student';
+  const isStudentPortalView = ['law_student', 'lawyer'].includes(userRole);
 
   return (
     <UnitsProvider key={currentUser.uid}>

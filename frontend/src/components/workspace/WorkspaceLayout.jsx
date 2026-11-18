@@ -1,6 +1,7 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { CalendarDays, CheckSquare, FileText, FolderOpen, Home, Library, MessageSquare, Users } from 'lucide-react';
 import { useUnits } from '../../context/UnitsContext';
+import { useAuth } from '../../context/AuthContext';
 
 const sections = [
   ['overview', 'Overview', Home], ['community', 'Community', MessageSquare],
@@ -10,8 +11,11 @@ const sections = [
 ];
 
 export function UnitNavigation({ groupId, compact = false }) {
+  const { userRole } = useAuth();
+  const visibleSections = ['admin', 'supervisor'].includes(userRole)
+    ? [...sections, ['activities', 'Student Activities', CheckSquare]] : sections;
   return <nav className={compact ? 'unit-tree-pages' : 'workspace-navigation'} aria-label="Unit pages">
-    {sections.map(([path, title, SectionIcon]) => {
+    {visibleSections.map(([path, title, SectionIcon]) => {
       const Icon = SectionIcon;
       return <NavLink key={path} to={`/units/${encodeURIComponent(groupId)}/${path}`}
         className={({ isActive }) => `workspace-nav-link${isActive ? ' active' : ''}`}>
@@ -38,7 +42,7 @@ export function WorkspaceLayout({ group, children }) {
       </label>}
     </header>
     <UnitNavigation groupId={group.id} />
-    {group.status === 'inactive' && <p className="workspace-notice">This unit is inactive. Activate it in Student Groups to add content.</p>}
+    {group.status === 'inactive' && <p className="workspace-notice">This unit is inactive. An administrator can activate it in Groups &amp; Units to add content.</p>}
     <div className="workspace-content">{children}</div>
   </div>;
 }
@@ -47,7 +51,7 @@ export function WorkspaceMembers({ group, preview = false }) {
   const people = [...group.supervisors.map((person) => ({ ...person, role_in_group: 'supervisor' })), ...group.members];
   return <div className="workspace-members">{(preview ? people.slice(0, 5) : people).map((person) => <article className="workspace-member" key={person.id}>
     <div className={`workspace-avatar${person.role_in_group === 'supervisor' ? ' supervisor' : ''}`} aria-hidden="true">{person.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</div>
-    <div><strong>{person.name}</strong><span>{person.role_in_group === 'leader' ? 'Unit leader · Student' : person.role_in_group === 'supervisor' ? 'Unit supervisor' : 'Student member'}</span>
+    <div><strong>{person.name}</strong><span>{person.role_in_group === 'leader' ? 'Unit leader · Student' : person.role_in_group === 'supervisor' ? 'Unit supervisor' : person.role === 'lawyer' ? 'Lawyer member' : 'Student member'}</span>
       {!preview && person.email && <a href={`mailto:${person.email}`}>{person.email}</a>}
       {!preview && person.joined_at && <small>Joined {workspaceDate(person.joined_at)}</small>}
     </div>

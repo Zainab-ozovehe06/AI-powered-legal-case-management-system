@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Check, Loader2, Search } from 'lucide-react';
 import { api } from '../api/apiClient';
+import { useAuth } from '../context/AuthContext';
 import {
   CASE_STATUS_STEPS,
   getCaseStatusMeta,
@@ -77,6 +78,7 @@ const getCaseTypeClass = (caseType) => {
 
 export default function StudentCases() {
   const navigate = useNavigate();
+  const { userRole } = useAuth();
 
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -130,9 +132,9 @@ export default function StudentCases() {
     <div className="student-cases-page animate-fade-in">
       <div className="student-cases-hero">
         <div>
-          <h1 className="student-cases-title">Cases</h1>
+          <h1 className="student-cases-title">{userRole === 'supervisor' ? 'Student Cases' : 'Cases'}</h1>
           <p className="student-cases-subtitle">
-            Review assigned matters and open any case to continue your work.
+            {userRole === 'supervisor' ? 'Review cases handled by students in your assigned units.' : 'Review assigned matters and open any case to continue your work.'}
           </p>
         </div>
       </div>
@@ -166,7 +168,7 @@ export default function StudentCases() {
         <div className="student-cases-panel student-cases-empty">
           <p className="student-empty-title">No cases yet</p>
           <p className="student-empty-copy">
-            Create or get assigned to a case to see it here.
+            {userRole === 'law_student' ? 'Create or get assigned to a case to see it here.' : 'Cases in your authorised scope will appear here.'}
           </p>
         </div>
       ) : (

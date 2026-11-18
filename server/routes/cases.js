@@ -12,13 +12,15 @@ import {
   ASSIGNMENT_TYPE,
   getActorId,
   getAssignedGroupsForCase,
-  getDirectCaseIdsForUser,
   getGroupIdsForUser,
   getVisibleCaseIdsForStudent,
   isCaseAssignedToGroup,
   normalizeText,
 } from '../utils/groupCollaboration.js';
 import { assignLawyerToCase } from '../utils/lawyerAssignment.js';
+import allowRoles from '../middleware/allowRoles.js';
+import { getSupervisionScope, getVisibleCaseIds, getVisibleCaseIdsForSupervisor } from '../utils/caseAccess.js';
+import { publicGroupProfiles } from '../utils/unitWorkspace.js';
 
 const router = express.Router();
 
@@ -30,6 +32,8 @@ const CASE_STATUS_ALIASES = {
   incourt: 'incourt',
   court: 'incourt',
   hearing: 'incourt',
+  awaitinghearing: 'awaiting_hearing',
+  courtdate: 'awaiting_hearing',
   trial: 'incourt',
   pending: 'pending',
   active: 'pending',
@@ -148,10 +152,15 @@ router.get('/', requireAuth, async (req, res) => {
 
     // Lawyers see cases directly assigned to them by an admin.
     if (currentUser.role === 'lawyer') {
-      const caseIds = await getDirectCaseIdsForUser(actorId);
+      const caseIds = await getVisibleCaseIds(currentUser);
       const cases = await getCasesByIds(caseIds);
 
       return res.status(200).json(await filterUnitCases(cases, normalizeText(req.query.group_id)));
+    }
+
+    if (currentUser.role === 'supervisor') {
+      const ids = await getVisibleCaseIdsForSupervisor(currentUser, normalizeText(req.query.group_id), normalizeText(req.query.student_id));
+      return res.status(200).json(await getCasesByIds(ids));
     }
 
     return res.status(403).json({ error: 'Access denied' });
@@ -183,12 +192,13 @@ router.get('/:caseId', requireAuth, canAccessCase, async (req, res) => {
     const visibleAssignedGroups =
       req.currentUser?.role === 'admin'
         ? assignedGroups
-        : assignedGroups.filter((group) => group.current_user_role);
+        : assignedGroups.filter((group) => group.current_user_role ||
+          (req.currentUser.role === 'supervisor' && group.supervisor_id === actorId && group.status !== 'inactive'));
 
     return res.status(200).json({
       id: caseDoc.id,
       ...caseData,
-      group_assignments: visibleAssignedGroups,
+      group_assignments: req.currentUser.role === 'admin' ? visibleAssignedGroups : visibleAssignedGroups.map(publicGroupProfiles),
     });
   } catch (error) {
     console.error('Error fetching case:', error);
@@ -200,16 +210,20 @@ router.get('/:caseId', requireAuth, canAccessCase, async (req, res) => {
 router.patch(
   '/:caseId/status',
   requireAuth,
-  requireStudentRole,
+  allowRoles('law_student', 'lawyer'),
   canAccessCase,
   async (req, res) => {
     try {
       const { caseId } = req.params;
       const nextStatus = normalizeCaseStatus(req.body?.status);
 
+      if (Object.keys(req.body || {}).some((field) => field !== 'status')) {
+        return res.status(400).json({ error: 'Only status can be updated through this endpoint' });
+      }
+
       if (!nextStatus) {
         return res.status(400).json({
-          error: 'Invalid status. Use one of: open, incourt, pending, closed',
+          error: 'Invalid status. Use one of: open, incourt, awaiting_hearing, pending, closed',
         });
       }
 
@@ -232,12 +246,25 @@ router.patch(
         });
       }
 
-      await caseRef.update({
+      // Existing workflows allow reopening and moving between all known states.
+      // Reject unknown source states instead of silently replacing them.
+      const previousStatus = normalizeCaseStatus(caseDoc.data().status);
+      if (!previousStatus) return res.status(409).json({ error: 'The current case status must be corrected before transitioning' });
+      if (previousStatus === nextStatus) return res.json({ message: 'Case status unchanged', case: { id: caseId, status: nextStatus } });
+      const batch = db.batch();
+      batch.update(caseRef, {
         status: nextStatus,
         status_updated_at: admin.firestore.FieldValue.serverTimestamp(),
         status_updated_by_user_id: actorId,
         updated_at: admin.firestore.FieldValue.serverTimestamp(),
       });
+      batch.set(db.collection('activities').doc(), {
+        case_id: caseId, court_name: null,
+        description: `Case status changed from ${previousStatus} to ${nextStatus}`,
+        previous_status: previousStatus, status: nextStatus,
+        logged_by_user_id: actorId, logged_at: admin.firestore.FieldValue.serverTimestamp(), type: 'case_status_updated',
+      });
+      await batch.commit();
 
       return res.status(200).json({
         message: 'Case status updated successfully',
@@ -617,19 +644,23 @@ router.post(
 router.get(
   '/:caseId/group-reflections',
   requireAuth,
+  allowRoles('admin', 'law_student', 'supervisor'),
   canAccessCase,
   async (req, res) => {
     try {
       const { caseId } = req.params;
       const actorId = getActorId(req);
       let authorizedGroupIds = null;
+      const supervision = req.currentUser.role === 'supervisor' ? await getSupervisionScope(req.currentUser) : null;
 
       if (!actorId) {
         return res.status(401).json({ error: 'Authenticated user ID missing' });
       }
 
       if (req.currentUser.role !== 'admin') {
-        const userGroupIds = await getGroupIdsForUser(actorId);
+        const userGroupIds = supervision
+          ? supervision.groupIds
+          : await getGroupIdsForUser(actorId);
         const assignmentChecks = await Promise.all(
           userGroupIds.map(async (groupId) => ({
             groupId,
@@ -660,7 +691,8 @@ router.get(
         }))
         .filter(
           (reflection) =>
-            !authorizedGroupIds || authorizedGroupIds.includes(reflection.group_id)
+            (!authorizedGroupIds || authorizedGroupIds.includes(reflection.group_id)) &&
+            (!supervision || supervision.studentIdsByGroup.get(reflection.group_id)?.includes(reflection.submitted_by))
         )
         .sort((a, b) => {
           const aMillis = a.submitted_at?.toMillis?.() || 0;
@@ -704,6 +736,7 @@ router.get('/:caseId/activities', requireAuth, canAccessCase, async (req, res) =
 router.patch(
   '/:caseId/activities/:activityId',
   requireAuth,
+  allowRoles('admin', 'law_student', 'lawyer'),
   canAccessCase,
   async (req, res) => {
     try {
@@ -735,6 +768,9 @@ router.patch(
 
       if (activityDoc.data().case_id !== caseId) {
         return res.status(400).json({ error: 'Activity does not belong to this case' });
+      }
+      if (req.currentUser.role === 'lawyer' && (activityDoc.data().logged_by_user_id !== actorId || activityDoc.data().type !== 'general_activity')) {
+        return res.status(403).json({ error: 'You can only edit your own activity notes' });
       }
 
       const updates = {
@@ -773,6 +809,7 @@ router.patch(
 router.delete(
   '/:caseId/activities/:activityId',
   requireAuth,
+  allowRoles('admin', 'law_student', 'lawyer'),
   canAccessCase,
   async (req, res) => {
     try {
@@ -786,6 +823,9 @@ router.delete(
 
       if (activityDoc.data().case_id !== caseId) {
         return res.status(400).json({ error: 'Activity does not belong to this case' });
+      }
+      if (req.currentUser.role === 'lawyer' && (activityDoc.data().logged_by_user_id !== getActorId(req) || activityDoc.data().type !== 'general_activity')) {
+        return res.status(403).json({ error: 'You can only delete your own activity notes' });
       }
 
       await activityRef.delete();
@@ -804,7 +844,7 @@ router.delete(
 );
 
 // LOG activity for a case
-router.post('/:caseId/activities', requireAuth, canAccessCase, async (req, res) => {
+router.post('/:caseId/activities', requireAuth, allowRoles('admin', 'law_student', 'lawyer'), canAccessCase, async (req, res) => {
   try {
     const { caseId } = req.params;
     const { court_name, description } = req.body;

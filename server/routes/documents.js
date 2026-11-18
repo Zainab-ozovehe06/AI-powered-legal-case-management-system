@@ -1,21 +1,29 @@
 import express from 'express';
-import fs from 'fs/promises';
 import multer from 'multer';
 import path from 'path';
 import { randomUUID } from 'crypto';
-import { fileURLToPath } from 'url';
-import { admin, db } from '../config/firebase.js';
+import { admin, db, storage } from '../config/firebase.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import canAccessCase from '../middleware/canAccessCase.js';
+import allowRoles from '../middleware/allowRoles.js';
+import { deleteStoredDocument, documentMetadata, readStoredDocument } from '../utils/documentStorage.js';
 
 const router = express.Router();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const uploadsRoot = path.resolve(__dirname, '..', 'uploads');
+const fileTypes = new Map([
+  ['.pdf', ['application/pdf']], ['.txt', ['text/plain']], ['.md', ['text/plain', 'text/markdown']],
+  ['.csv', ['text/csv', 'application/vnd.ms-excel']], ['.rtf', ['application/rtf', 'text/rtf']],
+  ['.doc', ['application/msword']], ['.docx', ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']],
+  ['.xls', ['application/vnd.ms-excel']], ['.xlsx', ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']],
+  ['.png', ['image/png']], ['.jpg', ['image/jpeg']], ['.jpeg', ['image/jpeg']],
+]);
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    const accepted = fileTypes.get(path.extname(file.originalname || '').toLowerCase())?.includes(file.mimetype);
+    callback(accepted ? null : Object.assign(new Error('Unsupported document type. Upload PDF, Office, text, CSV, RTF, PNG or JPEG files.'), { statusCode: 400 }), Boolean(accepted));
+  },
 });
 
 const sanitizePathSegment = (value) =>
@@ -28,28 +36,6 @@ const buildStoredFileName = (originalName) => {
 
 const getUploadRelativePath = (caseId, storedFileName) =>
   path.posix.join('documents', sanitizePathSegment(caseId), storedFileName);
-
-const resolveUploadPath = (relativePath) => {
-  const absolutePath = path.resolve(uploadsRoot, path.normalize(relativePath || ''));
-  const relativeToRoot = path.relative(uploadsRoot, absolutePath);
-
-  if (relativeToRoot.startsWith('..') || path.isAbsolute(relativeToRoot)) {
-    throw new Error('Invalid document path');
-  }
-
-  return absolutePath;
-};
-
-const deleteStoredFile = async (documentRecord) => {
-  if (!documentRecord?.server_file_path) return;
-
-  const absolutePath = resolveUploadPath(documentRecord.server_file_path);
-  await fs.unlink(absolutePath).catch((error) => {
-    if (error.code !== 'ENOENT') {
-      throw error;
-    }
-  });
-};
 
 const loadDocument = async (req, res, next) => {
   try {
@@ -74,8 +60,15 @@ const loadDocument = async (req, res, next) => {
   }
 };
 
-router.post('/:caseId/upload', requireAuth, canAccessCase, upload.single('file'), async (req, res) => {
-  let savedFilePath = null;
+router.get('/:caseId', requireAuth, canAccessCase, async (req, res) => {
+  try {
+    const snapshot = await db.collection('documents').where('case_id', '==', req.params.caseId).get();
+    res.json(snapshot.docs.map(documentMetadata));
+  } catch { res.status(500).json({ error: 'Unable to load case documents' }); }
+});
+
+router.post('/:caseId/upload', requireAuth, allowRoles('admin', 'law_student', 'lawyer'), canAccessCase, upload.single('file'), async (req, res) => {
+  let savedFile = null;
 
   try {
     const { caseId } = req.params;
@@ -98,11 +91,12 @@ router.post('/:caseId/upload', requireAuth, canAccessCase, upload.single('file')
     const displayName = path.basename(file.originalname || 'document');
     const storedFileName = buildStoredFileName(displayName);
     const relativePath = getUploadRelativePath(caseId, storedFileName);
-    const absolutePath = resolveUploadPath(relativePath);
-
-    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
-    await fs.writeFile(absolutePath, file.buffer);
-    savedFilePath = absolutePath;
+    const storedFile = storage.bucket().file(relativePath);
+    await storedFile.save(file.buffer, { resumable: false, metadata: {
+      contentType: file.mimetype, cacheControl: 'private, no-store',
+      metadata: { case_id: caseId, uploaded_by_user_id: actorId },
+    } });
+    savedFile = storedFile;
 
     const documentRef = db.collection('documents').doc();
 
@@ -110,17 +104,17 @@ router.post('/:caseId/upload', requireAuth, canAccessCase, upload.single('file')
       document_type: file.mimetype,
       case_id: caseId,
       file_path: null,
-      server_file_path: relativePath,
-      storage_provider: 'local_server',
+      storage_file_path: relativePath,
+      storage_provider: 'firebase_storage',
       uploaded_by_user_id: actorId,
       upload_date: admin.firestore.FieldValue.serverTimestamp(),
       name: displayName,
       size: file.size,
     };
 
-    await documentRef.set(newDocument);
-
-    await db.collection('activities').add({
+    const batch = db.batch();
+    batch.set(documentRef, newDocument);
+    batch.set(db.collection('activities').doc(), {
       case_id: caseId,
       court_name: null,
       description: `Uploaded document: ${displayName}`,
@@ -128,6 +122,8 @@ router.post('/:caseId/upload', requireAuth, canAccessCase, upload.single('file')
       logged_at: admin.firestore.FieldValue.serverTimestamp(),
       type: 'document_upload',
     });
+    await batch.commit();
+    savedFile = null;
 
     return res.status(201).json({
       message: 'Document uploaded successfully',
@@ -136,8 +132,8 @@ router.post('/:caseId/upload', requireAuth, canAccessCase, upload.single('file')
   } catch (error) {
     console.error('Error handling document upload:', error);
 
-    if (savedFilePath) {
-      await fs.unlink(savedFilePath).catch(() => {});
+    if (savedFile) {
+      await savedFile.delete({ ignoreNotFound: true }).catch(() => {});
     }
 
     return res.status(500).json({
@@ -150,22 +146,19 @@ router.get('/:documentId/download', requireAuth, loadDocument, canAccessCase, as
   try {
     const documentRecord = req.documentRecord;
 
-    if (!documentRecord.server_file_path) {
-      return res.status(400).json({ error: 'Document file is not stored on this server' });
-    }
-
-    const absolutePath = resolveUploadPath(documentRecord.server_file_path);
-    await fs.access(absolutePath);
+    const buffer = await readStoredDocument(documentRecord);
 
     const downloadName = path.basename(documentRecord.name || 'document');
 
     res.setHeader('Content-Type', documentRecord.document_type || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader(
       'Content-Disposition',
-      `inline; filename="${downloadName.replace(/"/g, '')}"`
+      `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`
     );
 
-    return res.sendFile(absolutePath);
+    return res.send(buffer);
   } catch (error) {
     console.error('Error serving document download:', error);
 
@@ -179,7 +172,7 @@ router.get('/:documentId/download', requireAuth, loadDocument, canAccessCase, as
   }
 });
 
-router.patch('/:documentId', requireAuth, loadDocument, canAccessCase, async (req, res) => {
+router.patch('/:documentId', requireAuth, allowRoles('admin', 'law_student'), loadDocument, canAccessCase, async (req, res) => {
   try {
     const actorId = req.currentUser?.uid || req.currentUser?.user_id;
     const nextName = path.basename(req.body?.name?.toString().trim() || '');
@@ -213,7 +206,7 @@ router.patch('/:documentId', requireAuth, loadDocument, canAccessCase, async (re
   }
 });
 
-router.delete('/:documentId', requireAuth, loadDocument, canAccessCase, async (req, res) => {
+router.delete('/:documentId', requireAuth, allowRoles('admin', 'law_student'), loadDocument, canAccessCase, async (req, res) => {
   try {
     const actorId = req.currentUser?.uid || req.currentUser?.user_id;
     const documentName = req.documentRecord.name || 'document';
@@ -222,7 +215,7 @@ router.delete('/:documentId', requireAuth, loadDocument, canAccessCase, async (r
       return res.status(401).json({ error: 'Authenticated user ID missing' });
     }
 
-    await deleteStoredFile(req.documentRecord);
+    await deleteStoredDocument(req.documentRecord);
     await req.documentRecord.ref.delete();
 
     await db.collection('activities').add({
@@ -244,6 +237,12 @@ router.delete('/:documentId', requireAuth, loadDocument, canAccessCase, async (r
       error: error.message || 'Failed to delete document',
     });
   }
+});
+
+router.use((error, _req, res, _next) => {
+  res.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : error.statusCode || 400).json({
+    error: error.code === 'LIMIT_FILE_SIZE' ? 'Documents must be at most 5 MB' : error.message,
+  });
 });
 
 export default router;

@@ -9,7 +9,7 @@ assign supervisors, change leaders and activate/deactivate groups.
 ## Storage and access
 
 - `groups` and `group_members` remain the only unit/membership sources.
-  Admins access all units; students access their current memberships; supervisors
+  Admins access all units; students and lawyers access their current memberships; supervisors
   access groups whose existing `supervisor_id` matches their authenticated UID.
   Inactive units are readable by admins and cannot receive new content.
 - Reports reuse `group_reflections`. New reports default to `restricted`.
@@ -20,12 +20,13 @@ assign supervisors, change leaders and activate/deactivate groups.
   request a revision with feedback.
 - Case-linked reflections retain the existing case access and group-leader
   submission rules, stay restricted, and never enter the community. Legacy
-  reflections without visibility remain restricted. Supervising a unit adds no
-  case access. Case documents stay in the existing case/document flows.
+  reflections without visibility remain restricted. Supervisors can review cases
+  handled by current active students in their active supervised units. Lawyer
+  membership alone adds no case access. Case documents stay in the existing flows.
 - Workspace-only additions use `group_posts`, `group_tasks`, `group_resources`
   and `group_comments`, each scoped by `group_id`. Resources are explicitly
   shared HTTP(S) links, not copies of confidential case attachments.
-  Task assignees must be current unit students. Discussion reads and writes
+  Task assignees must be current unit members. Discussion reads and writes
   validate both membership and the parent item's sharing permissions.
 - Existing `events` now support `group_id`, `visibility` (`private`, `unit`,
   `clinic`, or derived `case`), `category`, `end_date` and server-derived

@@ -40,11 +40,17 @@ export const AuthProvider = ({ children }) => {
 
         const userData = userSnap.data();
 
+        if (userData.status !== 'active') {
+          setCurrentUser(null);
+          setUserRole(null);
+          return;
+        }
+
         setCurrentUser({
+          ...userData,
           uid: user.uid,
           email: user.email,
           displayName: userData.displayName || user.displayName || null,
-          ...userData,
         });
 
         setUserRole(userData.role || null);
