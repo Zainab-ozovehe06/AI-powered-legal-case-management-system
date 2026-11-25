@@ -1,19 +1,5 @@
-import { auth } from '../services/firebase';
+import { authenticatedFetch, API_BASE_URL, getAuthHeaders } from '../services/authSession';
 import { withCaseDisplayIds } from '../utils/caseDisplayId';
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-
-
-const getCurrentUserToken = async () => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error('User is not authenticated');
-  }
-
-  return user.getIdToken();
-};
 
 const getErrorMessage = async (response) => {
   const text = await response.text();
@@ -28,15 +14,6 @@ const getErrorMessage = async (response) => {
   } catch {
     return text;
   }
-};
-
-const getAuthHeaders = async () => {
-  const token = await getCurrentUserToken();
-
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
 };
 
 const getQueryString = (params = {}) => {
@@ -54,7 +31,7 @@ const getQueryString = (params = {}) => {
 };
 
 const workspaceRequest = async (path, method = 'GET', body) => {
-  const response = await fetch(`${API_BASE_URL}/groups${path}`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/groups${path}`, {
     method, headers: await getAuthHeaders(),
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
@@ -74,7 +51,7 @@ export const api = {
   createCase: async (caseData) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/cases`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/cases`, {
       method: 'POST',
       headers,
       body: JSON.stringify(caseData),
@@ -93,7 +70,7 @@ export const api = {
   getVisibleCases: async (filters = {}) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/cases${getQueryString(filters)}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/cases${getQueryString(filters)}`, {
       method: 'GET',
       headers,
     });
@@ -111,7 +88,7 @@ export const api = {
   getCase: async (caseId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/cases/${caseId}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/cases/${caseId}`, {
       method: 'GET',
       headers,
     });
@@ -126,7 +103,7 @@ export const api = {
   updateCaseStatus: async (caseId, status) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/status`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/cases/${caseId}/status`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ status }),
@@ -142,7 +119,7 @@ export const api = {
   updateCase: async (caseId, updates) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/cases/${caseId}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/cases/${caseId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify(updates),
@@ -158,7 +135,7 @@ export const api = {
   deleteCase: async (caseId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/cases/${caseId}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/cases/${caseId}`, {
       method: 'DELETE',
       headers,
     });
@@ -173,7 +150,7 @@ export const api = {
   restoreCase: async (caseId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/restore`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/cases/${caseId}/restore`, {
       method: 'POST',
       headers,
     });
@@ -189,7 +166,7 @@ export const api = {
   logActivity: async (caseId, activityData) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/activities`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/cases/${caseId}/activities`, {
       method: 'POST',
       headers,
       body: JSON.stringify(activityData),
@@ -206,7 +183,7 @@ export const api = {
   updateActivity: async (caseId, activityId, updates) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `${API_BASE_URL}/cases/${caseId}/activities/${activityId}`,
       {
         method: 'PATCH',
@@ -225,7 +202,7 @@ export const api = {
   deleteActivity: async (caseId, activityId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `${API_BASE_URL}/cases/${caseId}/activities/${activityId}`,
       {
         method: 'DELETE',
@@ -244,7 +221,7 @@ export const api = {
   createEvent: async (eventData) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/events`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/events`, {
       method: 'POST',
       headers,
       body: JSON.stringify(eventData),
@@ -260,7 +237,7 @@ export const api = {
   getEvents: async (filters = {}) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `${API_BASE_URL}/events${getQueryString(filters)}`,
       {
         method: 'GET',
@@ -278,7 +255,7 @@ export const api = {
   getEvent: async (eventId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/events/${eventId}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/events/${eventId}`, {
       method: 'GET',
       headers,
     });
@@ -293,7 +270,7 @@ export const api = {
   getCaseEvents: async (caseId, filters = {}) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `${API_BASE_URL}/cases/${caseId}/events${getQueryString(filters)}`,
       {
         method: 'GET',
@@ -311,7 +288,7 @@ export const api = {
   updateEvent: async (eventId, updates) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/events/${eventId}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/events/${eventId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify(updates),
@@ -328,7 +305,7 @@ export const api = {
     const headers = await getAuthHeaders();
     const queryString = options.hard ? '?mode=delete' : '';
 
-    const response = await fetch(`${API_BASE_URL}/events/${eventId}${queryString}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/events/${eventId}${queryString}`, {
       method: 'DELETE',
       headers,
     });
@@ -342,22 +319,20 @@ export const api = {
 
   // Documents
   getCaseDocuments: async (caseId) => {
-    const response = await fetch(`${API_BASE_URL}/documents/${encodeURIComponent(caseId)}`, { headers: await getAuthHeaders() });
+    const response = await authenticatedFetch(`${API_BASE_URL}/documents/${encodeURIComponent(caseId)}`, { headers: await getAuthHeaders() });
     if (!response.ok) throw new Error(await getErrorMessage(response));
     return response.json();
   },
   uploadDocument: async (caseId, file) => {
-    const token = await getCurrentUserToken();
+    const headers = await getAuthHeaders(false);
 
     const formData = new FormData();
     formData.append('case_id', caseId);
     formData.append('file', file);
 
-    const response = await fetch(`${API_BASE_URL}/documents/${caseId}/upload`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/documents/${caseId}/upload`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
       body: formData,
     });
 
@@ -369,13 +344,11 @@ export const api = {
   },
 
   openDocument: async (documentId, fileName = 'document') => {
-    const token = await getCurrentUserToken();
+    const headers = await getAuthHeaders(false);
 
-    const response = await fetch(`${API_BASE_URL}/documents/${documentId}/download`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/documents/${documentId}/download`, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -401,7 +374,7 @@ export const api = {
   updateDocument: async (documentId, updates) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/documents/${documentId}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/documents/${documentId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify(updates),
@@ -417,7 +390,7 @@ export const api = {
   deleteDocument: async (documentId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/documents/${documentId}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/documents/${documentId}`, {
       method: 'DELETE',
       headers,
     });
@@ -431,7 +404,7 @@ export const api = {
 
   // AI Assistant
   sendAssistantMessage: async ({ prompt, files = [], conversation = [], contextPath = '', caseId = '' }) => {
-    const token = await getCurrentUserToken();
+    const headers = await getAuthHeaders(false);
     const formData = new FormData();
 
     formData.append('prompt', prompt);
@@ -443,11 +416,9 @@ export const api = {
       formData.append('references', file);
     });
 
-    const response = await fetch(`${API_BASE_URL}/ai/assistant`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/ai/assistant`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
       body: formData,
     });
 
@@ -462,7 +433,7 @@ export const api = {
   createGroup: async (data) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/groups`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/groups`, {
       method: 'POST',
       headers,
       body: JSON.stringify(data),
@@ -478,7 +449,7 @@ export const api = {
   getGroups: async () => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/groups`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/groups`, {
       method: 'GET',
       headers,
     });
@@ -493,7 +464,7 @@ export const api = {
   getMyGroups: async () => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/groups/my-groups`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/groups/my-groups`, {
       method: 'GET',
       headers,
     });
@@ -508,7 +479,7 @@ export const api = {
   getGroup: async (groupId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/groups/${groupId}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/groups/${groupId}`, {
       method: 'GET',
       headers,
     });
@@ -523,7 +494,7 @@ export const api = {
   addGroupMembers: async (groupId, memberIds) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/groups/${groupId}/members`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/groups/${groupId}/members`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ member_ids: memberIds }),
@@ -539,7 +510,7 @@ export const api = {
   removeGroupMember: async (groupId, userId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `${API_BASE_URL}/groups/${groupId}/members/${userId}`,
       {
         method: 'DELETE',
@@ -557,7 +528,7 @@ export const api = {
   updateGroupLeader: async (groupId, leaderId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/groups/${groupId}/leader`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/groups/${groupId}/leader`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ leader_id: leaderId }),
@@ -573,7 +544,7 @@ export const api = {
   updateGroupStatus: async (groupId, status) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/groups/${groupId}/status`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/groups/${groupId}/status`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ status }),
@@ -589,7 +560,7 @@ export const api = {
   assignSupervisorToGroup: async (groupId, supervisorId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `${API_BASE_URL}/admin/groups/${groupId}/assign-supervisor`,
       {
         method: 'PATCH',
@@ -608,7 +579,7 @@ export const api = {
   assignCaseToGroup: async (caseId, groupId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/assign-group`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/cases/${caseId}/assign-group`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ group_id: groupId }),
@@ -624,7 +595,7 @@ export const api = {
   assignCaseToLawyer: async (caseId, lawyerId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/admin/cases/${caseId}/assign-lawyer`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/admin/cases/${caseId}/assign-lawyer`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ lawyer_id: lawyerId }),
@@ -640,7 +611,7 @@ export const api = {
   submitGroupReflection: async (caseId, data) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/group-reflections`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/cases/${caseId}/group-reflections`, {
       method: 'POST',
       headers,
       body: JSON.stringify(data),
@@ -656,7 +627,7 @@ export const api = {
   getCaseGroupReflections: async (caseId) => {
     const headers = await getAuthHeaders();
 
-    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/group-reflections`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/cases/${caseId}/group-reflections`, {
       method: 'GET',
       headers,
     });
@@ -671,7 +642,7 @@ export const api = {
   getUsers: async () => {
   const headers = await getAuthHeaders();
 
-  const response = await fetch(`${API_BASE_URL}/users`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/users`, {
     method: 'GET',
     headers,
   });
@@ -687,7 +658,7 @@ export const api = {
 updateUser: async (userId, updates) => {
   const headers = await getAuthHeaders();
 
-  const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/users/${userId}`, {
     method: 'PATCH',
     headers,
     body: JSON.stringify(updates),
@@ -704,7 +675,7 @@ updateUser: async (userId, updates) => {
 getCaseActivities: async (caseId) => {
   const headers = await getAuthHeaders();
 
-  const response = await fetch(`${API_BASE_URL}/cases/${caseId}/activities`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/cases/${caseId}/activities`, {
     method: 'GET',
     headers,
   });
@@ -720,7 +691,7 @@ getCaseActivities: async (caseId) => {
 getSettings: async () => {
   const headers = await getAuthHeaders();
 
-  const response = await fetch(`${API_BASE_URL}/settings`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/settings`, {
     method: 'GET',
     headers,
   });
@@ -736,7 +707,7 @@ getSettings: async () => {
 updateSettings: async (settingsData) => {
   const headers = await getAuthHeaders();
 
-  const response = await fetch(`${API_BASE_URL}/settings`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/settings`, {
     method: 'PUT',
     headers,
     body: JSON.stringify(settingsData),

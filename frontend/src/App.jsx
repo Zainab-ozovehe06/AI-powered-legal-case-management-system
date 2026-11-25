@@ -29,6 +29,12 @@ const DashboardRouter = () => {
   if (userRole === 'law_student') return <StudentDashboard />;
   if (userRole === 'lawyer') return <StudentDashboard />;
   if (userRole === 'supervisor') return <Units dashboard />;
+  if (userRole === 'client') return (
+    <section className="student-dashboard-page">
+      <h1>Client Dashboard</h1>
+      <p>Welcome, {currentUser.name || currentUser.displayName || 'Client'}.</p>
+    </section>
+  );
 
   return <Navigate to="/login" replace />;
 };

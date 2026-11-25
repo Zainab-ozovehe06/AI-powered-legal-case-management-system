@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { browserSessionPersistence, getAuth, setPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -14,4 +14,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+// Complete this before showing the login form, including before opening a popup.
+// A restored Firebase user alone never establishes an application session.
+export const authReady = setPersistence(auth, browserSessionPersistence);
 export const db = getFirestore(app);

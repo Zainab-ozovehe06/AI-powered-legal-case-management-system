@@ -1,13 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function activeAdmin() {
-      return request.auth != null
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active'
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
     match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || activeAdmin());
+      // Profile reads go through Express so a valid Firebase token alone cannot
+      // bypass an expired application session, even for the user's own profile.
+      allow read: if false;
       // Preserve existing email/password onboarding. Roles and account updates
       // are managed only by the authenticated Express admin endpoints.
       allow create: if request.auth != null && request.auth.uid == userId

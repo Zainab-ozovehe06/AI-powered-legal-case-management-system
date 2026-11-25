@@ -20,7 +20,9 @@ const app = express();
 
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://ai-powered-legal-case-management-sy.vercel.app'
+  'https://ai-powered-legal-case-management-sy.vercel.app',
+  ...(process.env.ALLOWED_ORIGINS || '').split(',').map((origin) => origin.trim().replace(/\/$/, '')).filter(Boolean),
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL.replace(/\/$/, '')] : []),
   
 ];
 
@@ -36,6 +38,10 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  next();
+});
 
 app.get('/', (req, res) => {
   res.status(200).json({

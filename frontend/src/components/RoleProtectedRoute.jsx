@@ -2,7 +2,9 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function RoleProtectedRoute({ allowedRoles, children }) {
-  const { currentUser, userRole } = useAuth();
+  const { currentUser, userRole, loading } = useAuth();
+
+  if (loading) return <div role="status">Verifying your session...</div>;
 
   if (!currentUser) {
     return <Navigate to="/login" replace />;

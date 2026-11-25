@@ -6,6 +6,7 @@ const roleLabelMap = {
   law_student: 'Student',
   lawyer: 'Lawyer',
   supervisor: 'Supervisor',
+  client: 'Client',
 };
 
 const getInitials = (value) => {

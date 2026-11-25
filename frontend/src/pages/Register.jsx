@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { Loader2, Scale, UserPlus } from 'lucide-react';
-import { auth, db } from '../services/firebase';
+import { useAuth } from '../context/AuthContext';
+import { getAuthErrorMessage } from '../utils/authErrors';
 
 export default function Register() {
+  const { register } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,35 +27,14 @@ export default function Register() {
     setIsSubmitting(true);
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email.trim(),
-        password
-      );
-
-      const user = userCredential.user;
-
-      await updateProfile(user, {
-        displayName: trimmedName,
-      });
-
-      await setDoc(doc(db, 'users', user.uid), {
-        uid: user.uid,
-        name: trimmedName,
-        email: user.email,
-        role: 'law_student',
-        status: 'active',
-        createdAt: serverTimestamp(),
-        created_at: serverTimestamp(),
-      });
-
-      setMessage('Account created successfully.');
+      await register(trimmedName, email.trim(), password);
+      setMessage('Account created successfully. Sign in to continue.');
       setName('');
       setEmail('');
       setPassword('');
     } catch (error) {
-      console.error('Registration error:', error.message);
-      setMessage(error.message);
+      console.error('Registration error:', error.code || error.name);
+      setMessage(getAuthErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }

@@ -63,6 +63,11 @@ const vite = await createServer({
       export const AuthProvider = ({ children }) => children;
     `;
     if (id.replaceAll('\\', '/').endsWith('/src/services/firebase.js')) return `export const auth = { currentUser: { getIdToken: async () => localStorage.getItem('smoke-role') || 'law_student' } }; export const db = {};`;
+    if (id.replaceAll('\\', '/').endsWith('/src/services/authSession.js')) return `
+      export const API_BASE_URL = 'http://127.0.0.1:${apiPort}/api';
+      export const getAuthHeaders = async (json = true) => ({ ...(json ? { 'Content-Type': 'application/json' } : {}), Authorization: 'Bearer ' + (localStorage.getItem('smoke-role') || 'law_student') });
+      export const authenticatedFetch = (...args) => fetch(...args);
+    `;
   } }, react()],
   server: { host: '127.0.0.1', port: 0, strictPort: false },
 });

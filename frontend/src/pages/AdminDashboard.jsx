@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Users, FolderOpen, Clock3, CheckCircle2, Loader2 } from 'lucide-react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { api } from '../api/apiClient';
 import UpcomingEvents from '../components/calendar/UpcomingEvents';
 import { getTodayDateString } from '../components/calendar/eventUtils';
@@ -23,9 +21,9 @@ export default function AdminDashboard() {
       try {
         setLoading(true);
 
-        const [cases, activeUsersSnap, events] = await Promise.all([
+        const [cases, users, events] = await Promise.all([
           api.getVisibleCases(),
-          getDocs(query(collection(db, 'users'), where('status', '==', 'active'))),
+          api.getUsers(),
           api.getEvents({ status: 'upcoming', date_from: getTodayDateString() }),
         ]);
 
@@ -36,7 +34,7 @@ export default function AdminDashboard() {
         const closedCases = cases.filter(
           (c) => normalizeCaseStatus(c.status) === 'closed'
         ).length;
-        const activeUsers = activeUsersSnap.size;
+        const activeUsers = users.filter((user) => user.status === 'active').length;
 
         setUpcomingEvents(events);
         setSummary({

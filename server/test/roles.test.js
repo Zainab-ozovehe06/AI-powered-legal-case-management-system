@@ -259,10 +259,13 @@ test('case scheduling requires direct lawyer assignment, private audience and re
 });
 
 test('real authentication rejects missing/invalid tokens and inactive accounts and uses stored role/verified UID', async () => {
-  const h = await createHarness('cases', new Map(), { realAuth: true, authUid: 'l1' }); seed(h);
+  const authTime = Math.floor(Date.now() / 1000);
+  const h = await createHarness('cases', new Map(), { realAuth: true, authUid: 'l1', authTime }); seed(h);
   assert.equal((await h.request('get', '/')).status, 401);
   assert.equal((await h.request('get', '/', { headers: { authorization: 'Bearer invalid' } })).status, 401);
-  const headers = { authorization: 'Bearer valid' };
+  const signIn = await createHarness('authRoutes', h.tables, { realAuth: true, authUid: 'l1', authTime });
+  const started = await signIn.request('post', '/session', { headers: { authorization: 'Bearer valid' } });
+  const headers = { authorization: 'Bearer valid', 'x-session-id': started.body.session.id };
   h.table('users').get('l1').status = 'inactive';
   assert.equal((await h.request('get', '/', { headers })).status, 403);
   h.table('users').get('l1').status = 'active';

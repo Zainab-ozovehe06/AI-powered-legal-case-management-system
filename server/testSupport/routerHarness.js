@@ -21,6 +21,7 @@ export async function createHarness(routerName = 'events', sharedTables = new Ma
   }) }) };
   if (!sequences.has(tables)) sequences.set(tables, { nextId: 0 });
   const sequence = sequences.get(tables);
+  const defaultAuthTime = options.authTime ?? Math.floor((options.now ? options.now() : Date.now()) / 1000);
   let timestamp = 1793203200;
   const table = (name) => {
     if (!tables.has(name)) tables.set(name, new Map());
@@ -57,6 +58,21 @@ export async function createHarness(routerName = 'events', sharedTables = new Ma
   });
   const db = {
     collection: (name) => query(name),
+    async runTransaction(update) {
+      const run = async () => {
+        const writes = [];
+        const result = await update({
+          get: (ref) => ref.get(),
+          update: (ref, data) => writes.push(() => ref.update(data)),
+          set: (ref, data) => writes.push(() => ref.set(data)),
+        });
+        for (const write of writes) await write();
+        return result;
+      };
+      const pending = (sequence.transaction || Promise.resolve()).then(run);
+      sequence.transaction = pending.catch(() => {});
+      return pending;
+    },
     batch() {
       const writes = [];
       return {
@@ -69,6 +85,7 @@ export async function createHarness(routerName = 'events', sharedTables = new Ma
   };
   const context = vm.createContext({
     URL, Buffer, structuredClone, console: { ...console, error() {} },
+    Date: class extends Date { static now() { return options.now ? options.now() : Date.now(); } },
     process: { env: { GEMINI_API_KEY: 'isolated-test-key', LAW_CLINIC_RESOURCE_DIR: fileURLToPath(new URL('./missing-test-resources/', import.meta.url)) } },
     fetch: options.fetch || (() => { throw new Error('Network access is disabled in tests'); }),
   });
@@ -80,7 +97,12 @@ export async function createHarness(routerName = 'events', sharedTables = new Ma
   const modules = new Map();
   const base = new URL('../', import.meta.url);
   modules.set(new URL('config/firebase.js', base).href, synthetic({ db, storage,
-    auth: { async verifyIdToken(token, checkRevoked) { tokenChecks.push({ token, checkRevoked }); if (token !== 'valid') throw new Error('Invalid token'); return { uid: options.authUid || 'lawyer-1' }; } },
+    auth: { async verifyIdToken(token, checkRevoked) {
+      tokenChecks.push({ token, checkRevoked });
+      if (options.verifyToken) return options.verifyToken(token);
+      if (token !== 'valid') throw Object.assign(new Error('Invalid token'), { code: 'auth/argument-error' });
+      return { uid: options.authUid || 'lawyer-1', auth_time: defaultAuthTime };
+    } },
     admin: { firestore: { FieldValue: { serverTimestamp: () => ({ _seconds: ++timestamp }) } } },
   }));
   if (!options.realAuth) modules.set(new URL('middleware/authenticate.js', base).href, synthetic({ requireAuth: stubAuth,
@@ -105,9 +127,10 @@ export async function createHarness(routerName = 'events', sharedTables = new Ma
       const req = { currentUser: { role, uid, name: uid }, body, params, query: requestQuery, headers, file, files };
       const res = {
         statusCode: 200,
+        headers: {},
         status(code) { this.statusCode = code; return this; },
         json(data) { this.body = JSON.parse(JSON.stringify(data)); return this; },
-        setHeader() {},
+        setHeader(name, value) { this.headers[name.toLowerCase()] = value; },
         send(data) { this.body = data; return this; },
       };
       const originalError = console.error;
@@ -125,7 +148,7 @@ export async function createHarness(routerName = 'events', sharedTables = new Ma
         };
         await run(0);
       } finally { console.error = originalError; }
-      return { status: res.statusCode, body: res.body };
+      return { status: res.statusCode, body: res.body, headers: res.headers };
     },
   };
 }

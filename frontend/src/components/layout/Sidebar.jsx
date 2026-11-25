@@ -59,7 +59,8 @@ export const Sidebar = ({ collapsed, setCollapsed }) => {
       ? adminNavItems
       : userRole === 'lawyer'
         ? lawyerNavItems
-        : userRole === 'supervisor' ? supervisorNavItems : studentNavItems;
+        : userRole === 'supervisor' ? supervisorNavItems
+          : userRole === 'client' ? studentNavItems.filter((item) => item.path === '/') : studentNavItems;
   const sidebarClassName = [
     'sidebar',
     userRole === 'admin' ? 'admin-sidebar' : '',

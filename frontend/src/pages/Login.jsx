@@ -1,8 +1,9 @@
 
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Loader2, LogIn, Scale, Chrome } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { getAuthErrorMessage } from '../utils/authErrors';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -11,8 +12,7 @@ export default function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
-  const { login, loginWithGoogle } = useAuth();
-  const navigate = useNavigate();
+  const { login, loginWithGoogle, currentUser, sessionMessage } = useAuth();
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -21,10 +21,9 @@ export default function Login() {
 
     try {
       await login(email.trim(), password);
-      navigate('/');
     } catch (err) {
-      console.error('Login error:', err);
-      setError('Invalid email or password.');
+      console.error('Login error:', err.code || err.name);
+      setError(getAuthErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -36,32 +35,19 @@ export default function Login() {
 
     try {
       await loginWithGoogle();
-      navigate('/');
     } catch (err) {
-      console.error('Google login error:', err);
+      console.error('Google login error:', err.code || err.name);
 
-      switch (err.code) {
-        case 'auth/popup-closed-by-user':
-          setError('Sign-in was cancelled. Please try again.');
-          break;
-        case 'auth/popup-blocked':
-          setError('Your browser blocked the sign-in popup. Allow popups and try again.');
-          break;
-        case 'auth/unauthorized-domain':
-          setError('This website is not authorized for Google sign-in. Check Firebase Authorized domains.');
-          break;
-        case 'auth/account-exists-with-different-credential':
-          setError('An account already exists with this email. Try signing in with your existing method.');
-          break;
-        default:
-          setError('Google sign-in failed. Please try again.');
-      }
+      setError(getAuthErrorMessage(err));
     } finally {
       setIsGoogleSubmitting(false);
     }
   };
 
   const isSigningIn = isSubmitting || isGoogleSubmitting;
+
+  // Redirect only when the server session, profile and role are ready.
+  if (currentUser) return <Navigate to="/" replace />;
 
   return (
     <div className="auth-page">
@@ -106,9 +92,9 @@ export default function Login() {
             />
           </label>
 
-          {error && (
+          {(error || sessionMessage) && (
             <p className="auth-message auth-message-error" role="alert">
-              {error}
+              {error || sessionMessage}
             </p>
           )}
 
